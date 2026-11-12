@@ -1,0 +1,7 @@
+# Généré sur GitHub Actions
+*.xcodeproj/
+build/
+out/
+build.log
+NoteFlow/Info.plist
+Live/Info.plist

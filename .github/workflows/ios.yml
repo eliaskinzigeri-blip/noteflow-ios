@@ -1,0 +1,75 @@
+# App iPhone : génère le projet Xcode (XcodeGen), compile sans signature et fabrique NoteFlow.ipa.
+# L'ipa est publiée dans la version « latest » (téléchargement direct depuis Safari) ; le journal et les erreurs
+# partent sur la branche « ios-build ». SideStore signe l'app avec l'identifiant Apple à l'installation.
+name: App iPhone
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Outils
+        run: brew install xcodegen
+
+      - name: Compilation
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodegen generate
+          xcodebuild -project NoteFlow.xcodeproj -scheme NoteFlow -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee build.log
+
+      - name: Paquet .ipa
+        working-directory: ios
+        run: |
+          mkdir -p out/Payload
+          cp -R build/Build/Products/Release-iphoneos/NoteFlow.app out/Payload/
+          cd out && zip -qry NoteFlow.ipa Payload && ls -l NoteFlow.ipa
+
+      - name: Publication (version « latest »)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest ios/out/NoteFlow.ipa --target "$GITHUB_SHA" --title "NoteFlow pour iPhone" \
+            --notes "Ouvre ce lien sur ton iPhone, puis ajoute le fichier dans SideStore (My Apps, +). Version ${GITHUB_SHA::7}."
+
+      - name: Journal sur la branche ios-build
+        if: always()
+        env:
+          TOKEN: ${{ github.token }}
+          STATUS: ${{ job.status }}
+        run: |
+          mkdir -p /tmp/res
+          echo "$STATUS ${GITHUB_SHA}" > /tmp/res/status.txt
+          if [ -f ios/build.log ]; then
+            grep -E "(error|fatal error):" ios/build.log | sort -u > /tmp/res/errors.txt || true
+            tail -n 300 ios/build.log > /tmp/res/build-tail.log
+          fi
+          REMOTE="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git clone -q --depth 1 --branch ios-build "$REMOTE" /tmp/br 2>/dev/null; then :; else
+            mkdir /tmp/br && cd /tmp/br && git init -q && git checkout -q -b ios-build && git remote add origin "$REMOTE" && cd -
+          fi
+          cd /tmp/br
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/res/* .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "App iPhone ${GITHUB_SHA::7} : ${STATUS}"
+          git push -q origin ios-build
