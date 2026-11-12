@@ -34,6 +34,11 @@ struct WebView: UIViewRepresentable {
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let text = message.body as? String, let data = text.data(using: .utf8) else { return }
+            // {type:'settings'} : bouton « Régler » de Ma routine ; sinon le planning
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "settings" {
+                NativeUI.shared.settings = true
+                return
+            }
             Routine.shared.receive(data)
         }
 

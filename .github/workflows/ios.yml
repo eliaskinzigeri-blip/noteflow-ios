@@ -17,13 +17,18 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Outils
-        run: brew install xcodegen
+        run: |
+          brew install xcodegen
+          # Xcode le plus récent (AlarmKit demande le SDK iOS 26 ou plus)
+          XC=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -v beta | sort -V | tail -n 1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
 
       - name: Compilation
         working-directory: ios
@@ -39,6 +44,11 @@ jobs:
         run: |
           mkdir -p out/Payload
           cp -R build/Build/Products/Release-iphoneos/NoteFlow.app out/Payload/
+          # Signature ad hoc avec les droits : SideStore lit le groupe d'apps et le déclare pour le widget
+          APP=out/Payload/NoteFlow.app
+          codesign -f -s - --entitlements Live/NoteFlowLive.entitlements "$APP/PlugIns/NoteFlowLive.appex"
+          codesign -f -s - --entitlements NoteFlow/NoteFlow.entitlements "$APP"
+          codesign -d --entitlements - "$APP/PlugIns/NoteFlowLive.appex"
           cd out && zip -qry NoteFlow.ipa Payload && ls -l NoteFlow.ipa
 
       - name: Publication (version « latest »)

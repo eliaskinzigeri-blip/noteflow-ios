@@ -6,6 +6,7 @@ import WidgetKit
 struct NoteFlowLiveBundle: WidgetBundle {
     var body: some Widget {
         RoutineLive()
+        NextWidget()
     }
 }
 

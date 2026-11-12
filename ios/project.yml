@@ -1,6 +1,6 @@
 # App iPhone de NoteFlow : le site dans une vue web, plus la localisation en arrière-plan et l'activité en direct
 # (écran verrouillé, Dynamic Island). Projet Xcode généré par XcodeGen sur GitHub Actions (.github/workflows/ios.yml),
-# compilé sans signature : SideStore signe l'app avec l'identifiant Apple de l'élève à l'installation.
+# compilé sans signature puis signé « ad hoc » avec ses droits (groupe d'apps du widget) : SideStore signe l'app avec l'identifiant Apple de l'élève à l'installation.
 name: NoteFlow
 options:
   bundleIdPrefix: com.noteflow
@@ -38,6 +38,10 @@ targets:
         NSCameraUsageDescription: "Pour photographier tes cours, tes feuilles et tes sujets."
         NSPhotoLibraryUsageDescription: "Pour choisir les photos de tes cours."
         NSMicrophoneUsageDescription: "Pour la dictée à voix haute."
+        NSAlarmKitUsageDescription: "NoteFlow règle ton réveil sur ton premier cours et ton temps de préparation."
+        NSLocalNetworkUsageDescription: "Pour programmer le lever de soleil de tes lumières Philips Hue."
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: true
         ITSAppUsesNonExemptEncryption: false
@@ -45,6 +49,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.noteflow.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: NoteFlow/NoteFlow.entitlements
   NoteFlowLive:
     type: app-extension
     platform: iOS
@@ -60,3 +65,4 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.noteflow.app.live
+        CODE_SIGN_ENTITLEMENTS: Live/NoteFlowLive.entitlements
