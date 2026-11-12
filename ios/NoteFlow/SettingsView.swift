@@ -5,7 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage("notify") private var notify = true
+    @AppStorage("notify") private var notify = false
     @AppStorage("arrival") private var arrival = true
     @AppStorage("wakeOn") private var wakeOn = false
     @AppStorage("wakeSchoolOnly") private var schoolOnly = true
@@ -31,14 +31,14 @@ struct SettingsView: View {
                 wakeSection
                 if wakeOn && wakeMode != "phone" { hueSection }
                 Section {
-                    Toggle("Rappels de ta routine", isOn: $notify)
+                    Toggle("Tes rappels en notification", isOn: $notify)
                 } footer: {
-                    Text("Notifications de l’iPhone à chaque étape, et « Départ dans 5 min » avant chaque trajet. Si tu les reçois en double, coupe les notifications du raccourci NoteFlow de l’écran d’accueil.")
+                    Text("Seulement les rappels que tu crées, jamais les étapes de la routine : elles restent affichées dans l’activité en direct. Laisse coupé si le raccourci NoteFlow te les envoie déjà.")
                 }
                 Section {
                     Toggle("Arrivée détectée", isOn: $arrival)
                 } footer: {
-                    Text("En arrivant au collège ou à la maison, NoteFlow passe tout seul à l’étape suivante. Il faut la position « Toujours » (Réglages › NoteFlow › Position).")
+                    Text("En arrivant au collège ou à la maison, l’activité en direct passe toute seule à l’étape suivante. Il faut la position « Toujours » (Réglages › NoteFlow › Position).")
                 }
                 Section("Widget") {
                     Label("Maintiens ton doigt sur l’écran d’accueil ou l’écran verrouillé, touche Modifier, puis Ajouter un widget et choisis NoteFlow.", systemImage: "square.grid.2x2")

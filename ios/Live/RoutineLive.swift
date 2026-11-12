@@ -72,6 +72,8 @@ func icon(_ kind: String) -> String {
     case "dinner", "breakfast": return "fork.knife"
     case "shower": return "shower.fill"
     case "teeth": return "mouth"
+    case "sleep": return "moon.zzz.fill"
+    case "free": return "sparkles"
     case "dress": return "tshirt.fill"
     default: return "checklist"
     }

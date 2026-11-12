@@ -8,8 +8,8 @@ enum Prefs {
 
     static func flag(_ key: String, _ fallback: Bool) -> Bool { d.object(forKey: key) == nil ? fallback : d.bool(forKey: key) }
 
-    /// Rappels de la routine en notifications de l'iPhone
-    static var notify: Bool { flag("notify", true) }
+    /// Rappels personnels en notifications de l'iPhone (jamais les étapes de la routine : l'activité en direct les montre)
+    static var notify: Bool { flag("notify", false) }
     /// Arrivée au collège et à la maison détectée par la position
     static var arrival: Bool { flag("arrival", true) }
 

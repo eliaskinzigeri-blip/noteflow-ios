@@ -1,8 +1,8 @@
 import Foundation
 import UserNotifications
 
-/// Rappels de la routine programmés par l'iPhone lui-même (notifications locales, sans serveur) :
-/// les mêmes que les notifications du site, plus « Départ dans 5 min » avant chaque trajet.
+/// Rappels personnels programmés par l'iPhone lui-même (notifications locales, sans serveur).
+/// Pas de notification pour les étapes de la routine : l'activité en direct les affiche en permanence.
 /// iOS garde au plus 64 notifications en attente : on en programme 60 au maximum.
 final class Reminders: NSObject, UNUserNotificationCenterDelegate {
     static let shared = Reminders()
@@ -41,16 +41,6 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
         for a in plan.alerts ?? [] {
             guard let at = Reminders.iso.date(from: a.at) ?? Reminders.isoPlain.date(from: a.at), at > now else { continue }
             items.append(Item(id: "\(prefix)\(Int(at.timeIntervalSince1970))-\(Reminders.stable(a.title))", at: at, title: a.title, body: a.body))
-        }
-        // « Départ dans 5 min » : avant le premier trajet de chaque déplacement
-        for day in plan.days {
-            guard let midnight = PlanClock.midnight(day.day) else { continue }
-            for (i, s) in day.steps.enumerated() where s.travel && (i == 0 || !day.steps[i - 1].travel) {
-                let at = midnight.addingTimeInterval((s.start - 5) * 60)
-                guard at > now else { continue }
-                items.append(Item(id: "\(prefix)go-\(Int(at.timeIntervalSince1970))", at: at, title: "Départ dans 5 min",
-                                  body: "\(s.label) à \(PlanClock.clock(s.start))\(s.detail.isEmpty ? "" : " · \(s.detail)")"))
-            }
         }
         items.sort { $0.at < $1.at }
         let chosen = Array(items.prefix(60))

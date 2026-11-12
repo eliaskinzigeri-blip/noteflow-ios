@@ -118,7 +118,7 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         Wake.shared.sync(plan)
         guard let steps = plan?.days.first(where: { $0.day == today })?.steps,
               let i = steps.firstIndex(where: { $0.start <= minute && minute < $0.end && $0.kind != "sleep" }) else {
-            finish()
+            idle(now, today: today)
             return
         }
         let cur = steps[i]
@@ -153,6 +153,38 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         show(state, day: today)
     }
 
+    /// Hors étape (nuit, soirée, temps libre) : l'activité reste affichée et annonce la prochaine étape
+    private func idle(_ now: Date, today: String) {
+        guard let plan else { finish(); return }
+        if traveling { traveling = false; tune() }
+        var prevEnd = Calendar.current.startOfDay(for: now)
+        var upcoming: (Date, PlanStep)?
+        var sleeping = false
+        for d in plan.days {
+            guard let m = PlanClock.midnight(d.day) else { continue }
+            for s in d.steps {
+                let a = m.addingTimeInterval(s.start * 60), e = m.addingTimeInterval(s.end * 60)
+                if s.kind == "sleep" && a <= now && now < e { sleeping = true }
+                if e <= now && e > prevEnd { prevEnd = e }
+                if s.kind != "sleep", a > now, upcoming == nil || a < upcoming!.0 { upcoming = (a, s) }
+            }
+        }
+        guard let up = upcoming else { finish(); return }
+        let (at, n) = up
+        let when = Calendar.current.isDate(at, inSameDayAs: now) ? Routine.clock(n.start) : "demain \(Routine.clock(n.start))"
+        let wake = Wake.shared.next(plan).map { d -> String in
+            let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+            return String(format: "Réveil à %dh%02d", c.hour ?? 0, c.minute ?? 0)
+        }
+        let state = RoutineAttributes.ContentState(
+            title: sleeping ? "Bonne nuit" : "Temps libre",
+            detail: sleeping ? (wake ?? "") : "",
+            kind: sleeping ? "sleep" : "free", start: min(prevEnd, now), end: at,
+            next: "Ensuite : \(n.kind == "lesson" ? "cours de \(n.label)" : n.label) à \(when)",
+            travel: false, path: [], me: nil)
+        show(state, day: today)
+    }
+
     /// Déplacement en cours (étapes de trajet qui se suivent) : bornes dans `steps`
     private func block(_ steps: [PlanStep], around i: Int) -> (Int, Int) {
         var a = i, b = i
@@ -162,7 +194,7 @@ final class Routine: NSObject, CLLocationManagerDelegate {
     }
 
     /// Élève déjà à destination (à moins de 120 m de la fin du trajet) : index de l'étape d'après.
-    /// L'arrivée vaut pour tout le déplacement et n'est annoncée qu'une fois.
+    /// L'arrivée vaut pour tout le déplacement.
     private func arrived(_ steps: [PlanStep], around i: Int, day: String) -> Int? {
         guard Prefs.arrival else { return nil }
         let (a, b) = block(steps, around: i)
@@ -172,31 +204,31 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         guard let dest = steps[b].pts.last, let me = here, me.horizontalAccuracy < 100,
               me.distance(from: CLLocation(latitude: dest.lat, longitude: dest.lon)) < 120 else { return nil }
         UserDefaults.standard.set(key, forKey: "arrived")
-        let near = { (p: PlanPoint?) -> Bool in p.map { me.distance(from: CLLocation(latitude: $0.lat, longitude: $0.lon)) < 300 } ?? false }
-        let place = near(plan?.school) ? "Arrivé au collège" : near(plan?.home) ? "Arrivé à la maison" : "Arrivé"
-        let n = steps[b + 1]
-        let what = n.kind == "lesson" ? "Cours de \(n.label)" : n.label
-        Reminders.shared.now(id: key, title: place, body: "\(what) à \(Routine.clock(n.start))")
         return b + 1
     }
 
     private func show(_ state: RoutineAttributes.ContentState, day: String) {
         let content = ActivityContent(state: state, staleDate: state.end.addingTimeInterval(120))
         let running = Activity<RoutineAttributes>.activities.filter { $0.activityState == .active }
-        if let activity = running.first {
+        let d = UserDefaults.standard
+        let since = d.object(forKey: "activityStart") as? Date ?? .distantPast
+        // iOS arrête une activité au bout de 8 h : NoteFlow ouvert, on la remplace par une neuve après 6 h
+        let renew = UIApplication.shared.applicationState == .active && Date().timeIntervalSince(since) > 6 * 3600
+        if let activity = running.first, !renew {
             guard state != last else { return }
             last = state
             Task { await activity.update(content) }
             return
         }
-        // Une activité ne peut démarrer que NoteFlow ouvert : elle reprend à la prochaine ouverture
-        guard ActivityAuthorizationInfo().areActivitiesEnabled,
-              UIApplication.shared.applicationState == .active else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         do {
+            // iOS n'accepte en général un démarrage que NoteFlow ouvert ; en arrière-plan on tente quand même
             _ = try Activity.request(attributes: RoutineAttributes(day: day), content: content, pushType: nil)
+            for old in running { Task { await old.end(nil, dismissalPolicy: .immediate) } }
+            d.set(Date(), forKey: "activityStart")
             last = state
         } catch {
-            last = nil
+            if let activity = running.first { last = state; Task { await activity.update(content) } } else { last = nil }
         }
     }
 
