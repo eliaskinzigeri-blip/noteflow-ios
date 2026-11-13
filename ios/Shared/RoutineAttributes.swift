@@ -20,6 +20,11 @@ struct RoutineAttributes: ActivityAttributes {
         var travel: Bool
         var path: [MapPoint]
         var me: MapPoint?
+        // Navigation (trajets) : arrivée recalculée, destination, distance restante, avancement
+        var eta: Date? = nil
+        var dest: String? = nil
+        var meters: Double? = nil
+        var progress: Double? = nil
     }
 
     var day: String

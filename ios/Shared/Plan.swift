@@ -17,7 +17,9 @@ struct PlanDay: Codable {
     let wake: Double?   // réveil (minutes depuis minuit), recalculé si un prof est absent
     let school: Bool?   // jour de cours
     let steps: [PlanStep]
+    let sessions: [PlanSession]?  // séances Prépa Basket
 }
+struct PlanSession: Codable { let label: String; let start: Double; let end: Double }
 struct PlanAlert: Codable { let at: String; let title: String; let body: String }
 struct Plan: Codable {
     let type: String
