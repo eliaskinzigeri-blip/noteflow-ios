@@ -30,6 +30,8 @@ targets:
       path: NoteFlow/Info.plist
       properties:
         CFBundleDisplayName: NoteFlow
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIBackgroundModes: [location]
@@ -61,6 +63,8 @@ targets:
       path: Live/Info.plist
       properties:
         CFBundleDisplayName: NoteFlow
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
