@@ -17,12 +17,12 @@
       "category": "education",
       "versions": [
         {
-          "version": "1.0.7",
-          "buildVersion": "7",
-          "date": "2026-11-13T15:53:34Z",
-          "localizedDescription": "App iPhone : source SideStore et versions numérotées",
-          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.7/NoteFlow.ipa",
-          "size": 362007,
+          "version": "1.0.8",
+          "buildVersion": "8",
+          "date": "2026-11-13T16:01:55Z",
+          "localizedDescription": "App iPhone : le numéro de version (1.0.N) passe dans l'app et l'extension",
+          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.8/NoteFlow.ipa",
+          "size": 362008,
           "minOSVersion": "17.0"
         }
       ],
