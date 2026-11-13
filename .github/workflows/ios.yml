@@ -1,6 +1,8 @@
 # App iPhone : génère le projet Xcode (XcodeGen), compile sans signature et fabrique NoteFlow.ipa.
 # L'ipa est publiée dans la version « latest » (téléchargement direct depuis Safari) ; le journal et les erreurs
 # partent sur la branche « ios-build ». SideStore signe l'app avec l'identifiant Apple à l'installation.
+# Chaque compilation a son numéro (1.0.N) et met à jour la source SideStore (source.json sur « ios-build ») :
+# ajoutée une fois dans SideStore (Sources), elle y affiche chaque nouvelle version à mettre à jour.
 name: App iPhone
 
 on:
@@ -37,6 +39,7 @@ jobs:
           xcodegen generate
           xcodebuild -project NoteFlow.xcodeproj -scheme NoteFlow -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            MARKETING_VERSION="1.0.${{ github.run_number }}" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee build.log
 
       - name: Paquet .ipa
@@ -51,13 +54,26 @@ jobs:
           codesign -d --entitlements - "$APP/PlugIns/NoteFlowLive.appex"
           cd out && zip -qry NoteFlow.ipa Payload && ls -l NoteFlow.ipa
 
-      - name: Publication (version « latest »)
+      - name: Publication (version « latest » et version numérotée)
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest ios/out/NoteFlow.ipa --target "$GITHUB_SHA" --title "NoteFlow pour iPhone" \
-            --notes "Ouvre ce lien sur ton iPhone, puis ajoute le fichier dans SideStore (My Apps, +). Version ${GITHUB_SHA::7}."
+            --notes "Ouvre ce lien sur ton iPhone, puis ajoute le fichier dans SideStore (My Apps, +). Version 1.0.$RUN (${GITHUB_SHA::7})."
+          # Version numérotée : l'adresse de téléchargement de la source SideStore ne change plus après coup
+          gh release create "v1.0.$RUN" ios/out/NoteFlow.ipa --target "$GITHUB_SHA" \
+            --title "NoteFlow 1.0.$RUN" --notes "Version ${GITHUB_SHA::7}." --latest=false
+
+      - name: Source SideStore
+        env:
+          RUN: ${{ github.run_number }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          mkdir -p /tmp/res
+          python3 .github/sidestore_source.py > /tmp/res/source.json
+          cat /tmp/res/source.json
 
       - name: Journal sur la branche ios-build
         if: always()
@@ -76,7 +92,8 @@ jobs:
             mkdir /tmp/br && cd /tmp/br && git init -q && git checkout -q -b ios-build && git remote add origin "$REMOTE" && cd -
           fi
           cd /tmp/br
-          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          # La source SideStore reste en place si la compilation échoue (elle n'est remplacée que par une nouvelle)
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name source.json -exec rm -rf {} +
           cp /tmp/res/* .
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
