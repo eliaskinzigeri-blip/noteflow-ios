@@ -12,6 +12,9 @@ struct WebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
+        // Domaine lié à l'app (WKAppBoundDomains) : le service worker du site tourne aussi dans l'app,
+        // donc les pages et les parcours déjà chargés marchent hors ligne
+        config.limitsNavigationsToAppBoundDomains = true
         config.userContentController.add(context.coordinator, name: "noteflow")
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = context.coordinator
@@ -42,10 +45,11 @@ struct WebView: UIViewRepresentable {
             Routine.shared.receive(data)
         }
 
-        /// Liens vers d'autres sites (Prépa Basket, Pronote, cartes) : dans Safari.
+        /// Autres sites (Prépa Basket, Pronote, cartes) : dans Safari.
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            if let target = action.request.url, action.navigationType == .linkActivated,
+            // Seul le site est lié à l'app : toute page d'un autre domaine (lien ou redirection) s'ouvre dans Safari
+            if let target = action.request.url, action.targetFrame?.isMainFrame ?? true,
                target.host != nil, target.host != home.host {
                 UIApplication.shared.open(target)
                 decisionHandler(.cancel)
