@@ -1,0 +1,46 @@
+{
+  "name": "NoteFlow",
+  "identifier": "com.noteflow.source",
+  "subtitle": "L’app iPhone de NoteFlow",
+  "sourceURL": "https://raw.githubusercontent.com/eliaskinzigeri-blip/noteflow-ios/ios-build/source.json",
+  "iconURL": "https://raw.githubusercontent.com/eliaskinzigeri-blip/noteflow-ios/main/ios/NoteFlow/Assets.xcassets/AppIcon.appiconset/icon.png",
+  "tintColor": "#0A0A0A",
+  "apps": [
+    {
+      "name": "NoteFlow",
+      "bundleIdentifier": "com.noteflow.app",
+      "developerName": "NoteFlow",
+      "subtitle": "Révisions, routine et activité en direct",
+      "localizedDescription": "NoteFlow sur iPhone : le site, l’activité en direct de ta routine avec la navigation, le widget, le réveil intelligent et les lumières Philips Hue.",
+      "iconURL": "https://raw.githubusercontent.com/eliaskinzigeri-blip/noteflow-ios/main/ios/NoteFlow/Assets.xcassets/AppIcon.appiconset/icon.png",
+      "tintColor": "#0A0A0A",
+      "category": "education",
+      "versions": [
+        {
+          "version": "1.0.7",
+          "buildVersion": "7",
+          "date": "2026-11-13T15:53:34Z",
+          "localizedDescription": "App iPhone : source SideStore et versions numérotées",
+          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.7/NoteFlow.ipa",
+          "size": 362007,
+          "minOSVersion": "17.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [
+          "com.apple.security.application-groups"
+        ],
+        "privacy": {
+          "NSLocationWhenInUseUsageDescription": "Suivre ton trajet jusqu’à l’arrêt et au collège.",
+          "NSLocationAlwaysAndWhenInUseUsageDescription": "Activité en direct de ton trajet même NoteFlow fermé.",
+          "NSCameraUsageDescription": "Photographier tes cours.",
+          "NSPhotoLibraryUsageDescription": "Choisir les photos de tes cours.",
+          "NSMicrophoneUsageDescription": "Dictée à voix haute.",
+          "NSAlarmKitUsageDescription": "Réveil réglé sur ton premier cours.",
+          "NSLocalNetworkUsageDescription": "Lever de soleil des lumières Philips Hue."
+        }
+      }
+    }
+  ],
+  "news": []
+}
