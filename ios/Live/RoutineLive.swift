@@ -10,9 +10,9 @@ struct NoteFlowLiveBundle: WidgetBundle {
     }
 }
 
-/// Couleurs de NoteFlow : noir, blanc et rouge braise (#e7000b)
+/// Couleurs de NoteFlow : noir et blanc
 enum NF {
-    static let red = Color(red: 0.906, green: 0, blue: 0.043)
+    static let accent = Color.white
     static let ink = Color(red: 0.04, green: 0.04, blue: 0.04)
     static let soft = Color.white.opacity(0.62)
 }
@@ -50,11 +50,11 @@ struct RoutineLive: Widget {
                     }
                 }
             } compactLeading: {
-                Image(systemName: icon(s.kind)).foregroundStyle(NF.red)
+                Image(systemName: icon(s.kind)).foregroundStyle(NF.accent)
             } compactTrailing: {
                 Countdown(state: s, font: .caption2.weight(.semibold), compact: true)
             } minimal: {
-                Image(systemName: icon(s.kind)).foregroundStyle(NF.red)
+                Image(systemName: icon(s.kind)).foregroundStyle(NF.accent)
             }
         }
     }
@@ -127,11 +127,11 @@ struct Countdown: View {
             .minimumScaleFactor(0.7)
             .multilineTextAlignment(.trailing)
             .frame(width: width, alignment: .trailing)
-            .foregroundStyle(state.travel ? NF.red : .white)
+            .foregroundStyle(state.travel ? NF.accent : .white)
     }
 }
 
-/// Barre d'avancement façon GPS : trajet fait en rouge, toi (flèche), destination (rond)
+/// Barre d'avancement façon GPS : trajet fait en blanc, toi (flèche), destination (rond)
 struct Track: View {
     let progress: Double
     let kind: String
@@ -141,17 +141,17 @@ struct Track: View {
             let w = geo.size.width
             let x = 9 + (w - 18) * CGFloat(min(max(progress, 0), 1))
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.18)).frame(height: 6)
-                Capsule().fill(NF.red).frame(width: max(x, 6), height: 6)
+                Capsule().fill(Color.white.opacity(0.22)).frame(height: 6)
+                Capsule().fill(NF.accent).frame(width: max(x, 6), height: 6)
                 Circle().stroke(Color.white, lineWidth: 3).background(Circle().fill(NF.ink))
                     .frame(width: 13, height: 13).position(x: w - 7, y: 9)
                 ZStack {
-                    Circle().fill(NF.red)
-                    Circle().stroke(Color.white, lineWidth: 2.5)
+                    Circle().fill(Color.white)
+                    Circle().stroke(NF.ink, lineWidth: 2.5)
                     Image(systemName: kind == "bus" ? "bus.fill" : kind == "wait" ? "clock.fill" : "location.north.fill")
                         .font(.system(size: 8, weight: .bold))
                         .rotationEffect(kind == "walk" ? .degrees(90) : .zero)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(NF.ink)
                 }
                 .frame(width: 20, height: 20)
                 .position(x: x, y: 9)
@@ -199,7 +199,7 @@ struct LockScreenView: View {
     private var step: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .center, spacing: 6) {
-                Image(systemName: icon(state.kind)).foregroundStyle(state.kind == "session" ? NF.red : .white)
+                Image(systemName: icon(state.kind)).foregroundStyle(state.kind == "session" ? NF.accent : .white)
                 Text(state.title).font(.headline).lineLimit(1)
                 Spacer(minLength: 4)
                 Countdown(state: state, font: .subheadline.weight(.semibold))
@@ -209,7 +209,7 @@ struct LockScreenView: View {
             }
             ProgressView(timerInterval: min(state.start, Date())...state.end, countsDown: false,
                          label: { EmptyView() }, currentValueLabel: { EmptyView() })
-                .tint(NF.red)
+                .tint(NF.accent)
             if !state.next.isEmpty {
                 Text(state.next).font(.caption2).foregroundStyle(NF.soft).lineLimit(1)
             }
@@ -218,7 +218,7 @@ struct LockScreenView: View {
     }
 }
 
-/// Mini-carte du trajet : le tracé, le départ (point plein), l'arrivée (rond) et ta position (point rouge).
+/// Mini-carte du trajet : le tracé, le départ (point plein), l'arrivée (rond) et ta position (point blanc).
 struct MiniMap: View {
     let path: [MapPoint]
     let me: MapPoint?
@@ -242,8 +242,8 @@ struct MiniMap: View {
                     Circle().stroke(Color.white, lineWidth: 2).frame(width: 11, height: 11).position(end)
                 }
                 if let m = me {
-                    Circle().fill(NF.red)
-                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                    Circle().fill(Color.white)
+                        .overlay(Circle().stroke(NF.ink, lineWidth: 3))
                         .frame(width: 12, height: 12)
                         .position(x: m.x * w, y: m.y * h)
                 }
