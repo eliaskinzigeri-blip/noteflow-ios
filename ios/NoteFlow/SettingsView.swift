@@ -6,6 +6,8 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage("notify") private var notify = false
+    @AppStorage("notifySchool") private var school = true
+    @State private var copied = false
     @AppStorage("arrival") private var arrival = true
     @AppStorage("wakeOn") private var wakeOn = false
     @AppStorage("wakeSchoolOnly") private var schoolOnly = true
@@ -31,6 +33,29 @@ struct SettingsView: View {
                 wakeSection
                 if wakeOn && wakeMode != "phone" { hueSection }
                 Section {
+                    Toggle("Notes, informations et devoirs", isOn: $school)
+                        .onChange(of: school) { _, on in if on { Reminders.shared.authorize() } }
+                } header: {
+                    Text("Notifications de l’école")
+                } footer: {
+                    Text("Nouvelle note, nouvelle information ou sondage, devoirs pour demain (18 h) et évaluation dans 3 jours. L’app vérifie toutes les 3 minutes tant qu’elle tourne : garde la position sur « Toujours » pour qu’elle reste éveillée, et ne la ferme pas depuis le sélecteur d’apps. \(Inbox.shared.status)")
+                }
+                Section {
+                    Button {
+                        // Lu par les tweaks ShortLimiter (YouTube) et StreamBoost (Twitch) ; effacé au bout de 10 minutes
+                        UIPasteboard.general.setItems([["public.utf8-plain-text": "noteflow-focus:\(Inbox.shared.key)"]],
+                                                      options: [.expirationDate: Date(timeIntervalSinceNow: 600)])
+                        copied = true
+                    } label: {
+                        Label(copied ? "Code copié : ouvre YouTube ou Twitch" : "Copier le code de liaison", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    }
+                    .disabled(!Inbox.shared.linked)
+                } header: {
+                    Text("Mode focus : YouTube et Twitch")
+                } footer: {
+                    Text("Pendant un focus, YouTube et Twitch (lancés depuis LiveContainer avec leurs tweaks) sont bloqués en entier, sans raccourci. Une seule fois par app : copie le code, puis ouvre l’app. Elle le lit toute seule ; sinon, réglages du tweak (appui long à trois doigts) › Mode focus NoteFlow › Coller le code de liaison.")
+                }
+                Section {
                     Toggle("Tes rappels en notification", isOn: $notify)
                 } footer: {
                     Text("Seulement les rappels que tu crées, jamais les étapes de la routine : elles restent affichées dans l’activité en direct. Laisse coupé si le raccourci NoteFlow te les envoie déjà.")
@@ -50,7 +75,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } }
             }
-            .onDisappear { Routine.shared.settingsChanged() }
+            .onDisappear { Routine.shared.settingsChanged(); Inbox.shared.poll(force: true) }
         }
     }
 

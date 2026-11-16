@@ -134,6 +134,7 @@ final class Routine: NSObject, CLLocationManagerDelegate {
     }
 
     func refresh() {
+        Inbox.shared.poll()  // notifications de l'école : au plus un relevé toutes les 3 minutes
         let now = Date()
         let midnight = Calendar.current.startOfDay(for: now)
         let minute = now.timeIntervalSince(midnight) / 60

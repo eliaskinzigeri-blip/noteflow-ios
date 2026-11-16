@@ -20,6 +20,49 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
         done([.banner, .sound, .list])
     }
 
+    /// Notification touchée : la page concernée s'ouvre dans NoteFlow (notes, informations, devoirs)
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler done: @escaping () -> Void) {
+        if let url = response.notification.request.content.userInfo["url"] as? String, !url.isEmpty {
+            DispatchQueue.main.async { WebView.open(url) }
+        }
+        done()
+    }
+
+    // MARK: Notifications de l'école (Inbox.swift) : identifiants « school-… », hors des rappels « nf-… »
+
+    private let school = "school-"
+
+    func authorize() {
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    /// Tout de suite (`at` absent) ou programmée ; le même identifiant remplace la notification en attente.
+    func post(id: String, title: String, body: String, url: String, at: Date? = nil) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = ["url": url]
+        var trigger: UNNotificationTrigger?
+        if let at {
+            let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: at)
+            trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+        }
+        center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
+    }
+
+    /// Retire les notifications de l'école programmées qui ne sont plus à envoyer (devoir fait, évaluation annulée).
+    func keepSchool(_ ids: Set<String>) {
+        center.getPendingNotificationRequests { [weak self] pending in
+            guard let self else { return }
+            let drop = pending.map(\.identifier).filter { $0.hasPrefix(self.school) && !ids.contains($0) }
+            if !drop.isEmpty { self.center.removePendingNotificationRequests(withIdentifiers: drop) }
+        }
+    }
+
+    func clearSchool() { keepSchool([]) }
+
     private static let iso: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

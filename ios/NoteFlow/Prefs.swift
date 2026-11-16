@@ -10,6 +10,8 @@ enum Prefs {
 
     /// Rappels personnels en notifications de l'iPhone (jamais les étapes de la routine : l'activité en direct les montre)
     static var notify: Bool { flag("notify", false) }
+    /// Notifications de l'école (nouvelle note, information, devoirs pour demain, évaluation) : voir Inbox.swift
+    static var school: Bool { flag("notifySchool", true) }
     /// Arrivée au collège et à la maison détectée par la position
     static var arrival: Bool { flag("arrival", true) }
 
