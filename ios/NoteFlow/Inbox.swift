@@ -5,7 +5,7 @@ import UserNotifications
 /// Notifications de l'école dans l'app iPhone : nouvelle note, nouvelle information ou sondage, devoirs pour demain
 /// et évaluation dans 3 jours. Le site les reçoit par Firebase (notifications web), que la vue web d'une app ne
 /// reçoit pas, et une app installée par SideStore n'a pas droit aux notifications d'Apple (APNs). L'app demande
-/// donc elle-même à NoteFlow ce qui est nouveau (fonction « noteflow-focus », q=inbox, avec la clé secrète du
+/// donc elle-même à NoteFlow ce qui est nouveau (fonction « noteflow-inbox », avec la clé secrète du
 /// compte) et l'affiche en notification locale. Elle le fait toutes les 3 minutes tant qu'elle tourne : au premier
 /// plan, en arrière-plan (la localisation de l'activité en direct la garde éveillée), et aux réveils d'iOS.
 /// Les devoirs et les évaluations sont programmés à l'avance : ils sonnent même si l'app est fermée.
@@ -13,7 +13,7 @@ final class Inbox {
     static let shared = Inbox()
     static let refreshTask = "com.noteflow.app.refresh"
 
-    private let endpoint = "https://ieagkscoaoutrvsgihat.supabase.co/functions/v1/noteflow-focus"
+    private let endpoint = "https://ieagkscoaoutrvsgihat.supabase.co/functions/v1/noteflow-inbox"
     private let d = UserDefaults.standard
     private var busy = false
     private var lastTry = Date.distantPast
@@ -52,7 +52,7 @@ final class Inbox {
         guard Prefs.school else { Reminders.shared.clearSchool(); finish(false); return }
         guard linked, !busy, Date().timeIntervalSince(lastTry) >= (force ? 15 : 180) else { finish(false); return }
         var parts = URLComponents(string: endpoint)!
-        parts.queryItems = [URLQueryItem(name: "q", value: "inbox"), URLQueryItem(name: "k", value: key)]
+        parts.queryItems = [URLQueryItem(name: "k", value: key)]
         let since = d.double(forKey: "inboxSince")
         // Une minute et demie de recouvrement : une alerte écrite pendant le relevé d'avant n'est pas perdue
         if since > 0 { parts.queryItems?.append(URLQueryItem(name: "since", value: String(Int(since - 90_000)))) }
