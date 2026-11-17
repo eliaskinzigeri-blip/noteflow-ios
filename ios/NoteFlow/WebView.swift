@@ -39,6 +39,32 @@ struct WebView: UIViewRepresentable {
     })();
     """
 
+    /// La page reste ouverte des jours dans l'app : au retour dans l'app, si le site a été mis à jour entre-temps
+    /// (empreintes de ses fichiers principaux changées), elle se recharge pour afficher la nouvelle version.
+    private static let freshScript = """
+    (function () {
+      var files = ['/index.html', '/app.js', '/focus.js', '/v2.js', '/routine.js', '/styles.css', '/sw.js'];
+      var base = null, busy = false;
+      async function signature() {
+        var tags = await Promise.all(files.map(function (f) {
+          return fetch(f, { method: 'HEAD', cache: 'no-store' }).then(function (r) { return r.ok ? (r.headers.get('etag') || '') : '?'; });
+        }));
+        return tags.indexOf('?') >= 0 ? null : tags.join('|');
+      }
+      signature().then(function (s) { base = s; }).catch(function () {});
+      document.addEventListener('visibilitychange', async function () {
+        if (document.hidden || busy) return;
+        busy = true;
+        try {
+          var now = await signature();
+          if (now && base && now !== base) location.reload();
+          else if (now && !base) base = now;
+        } catch (e) { /* hors ligne : on garde la page */ }
+        busy = false;
+      });
+    })();
+    """
+
     private static weak var current: WKWebView?
     private static var pending: String?
 
@@ -69,6 +95,7 @@ struct WebView: UIViewRepresentable {
         config.limitsNavigationsToAppBoundDomains = true
         config.userContentController.add(context.coordinator, name: "noteflow")
         config.userContentController.addUserScript(WKUserScript(source: WebView.keyScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: WebView.freshScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = context.coordinator
         view.uiDelegate = context.coordinator
