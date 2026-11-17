@@ -17,12 +17,12 @@
       "category": "education",
       "versions": [
         {
-          "version": "1.0.9",
-          "buildVersion": "9",
-          "date": "2026-11-16T18:03:25Z",
-          "localizedDescription": "Nouvelle version",
-          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.9/NoteFlow.ipa",
-          "size": 405317,
+          "version": "1.0.11",
+          "buildVersion": "11",
+          "date": "2026-11-17T18:50:32Z",
+          "localizedDescription": "App iPhone : la page se recharge au retour dans l'app quand le site a été mis à jour",
+          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.11/NoteFlow.ipa",
+          "size": 406381,
           "minOSVersion": "17.0"
         }
       ],
