@@ -86,6 +86,17 @@ struct WebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(home: url) }
 
+    /// Scripts de la page ; refaits quand la copie de la session change, pour qu'un rechargement remette la dernière.
+    static func scripts(_ controller: WKUserContentController) {
+        controller.removeAllUserScripts()
+        if let restore = Session.restoreScript() {
+            controller.addUserScript(WKUserScript(source: restore, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
+        controller.addUserScript(WKUserScript(source: Session.watchScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        controller.addUserScript(WKUserScript(source: keyScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        controller.addUserScript(WKUserScript(source: freshScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+    }
+
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
@@ -94,8 +105,7 @@ struct WebView: UIViewRepresentable {
         // donc les pages et les parcours déjà chargés marchent hors ligne
         config.limitsNavigationsToAppBoundDomains = true
         config.userContentController.add(context.coordinator, name: "noteflow")
-        config.userContentController.addUserScript(WKUserScript(source: WebView.keyScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        config.userContentController.addUserScript(WKUserScript(source: WebView.freshScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        WebView.scripts(config.userContentController)
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = context.coordinator
         view.uiDelegate = context.coordinator
@@ -104,7 +114,13 @@ struct WebView: UIViewRepresentable {
         view.isOpaque = false
         view.backgroundColor = UIColor(red: 0.96, green: 0.96, blue: 0.96, alpha: 1)
         if #available(iOS 16.4, *) { view.isInspectable = true }
-        view.load(URLRequest(url: url))
+        // Après un redémarrage, iOS relance l'app en arrière-plan (localisation) avant le premier déverrouillage :
+        // le stockage du site est alors illisible et la page s'ouvrirait déconnectée. On attend le déverrouillage.
+        if UIApplication.shared.isProtectedDataAvailable {
+            view.load(URLRequest(url: url))
+        } else {
+            context.coordinator.loadAfterUnlock(view)
+        }
         WebView.current = view
         return view
     }
@@ -113,14 +129,37 @@ struct WebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
         let home: URL
+        private var waiting: [NSObjectProtocol] = []
 
         init(home: URL) { self.home = home }
+
+        /// Charge la page au déverrouillage (ou au retour dans l'app, si iOS l'avait suspendue entre-temps)
+        func loadAfterUnlock(_ view: WKWebView) {
+            let names = [UIApplication.protectedDataDidBecomeAvailableNotification, UIApplication.didBecomeActiveNotification]
+            waiting = names.map { name in
+                NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self, weak view] _ in
+                    guard let self, let view, !self.waiting.isEmpty, UIApplication.shared.isProtectedDataAvailable else { return }
+                    self.waiting.forEach { NotificationCenter.default.removeObserver($0) }
+                    self.waiting = []
+                    WebView.scripts(view.configuration.userContentController)  // le trousseau est lisible maintenant
+                    view.load(URLRequest(url: self.home))
+                }
+            }
+        }
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let text = message.body as? String, let data = text.data(using: .utf8) else { return }
             // {type:'settings'} : bouton « Régler » de Ma routine ; sinon le planning
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "settings" {
                 NativeUI.shared.settings = true
+                return
+            }
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "auth" {
+                // Session du site : copie de secours dans le trousseau
+                if let items = obj["items"] as? [String: String] {
+                    Session.save(items)
+                    if let controller = message.webView?.configuration.userContentController { WebView.scripts(controller) }
+                }
                 return
             }
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "focus" {
