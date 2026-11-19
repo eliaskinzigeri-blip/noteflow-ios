@@ -4,6 +4,8 @@
 name: NoteFlow
 options:
   bundleIdPrefix: com.noteflow
+  # Français : les phrases de Siri (Siri.swift) sont écrites en français
+  developmentLanguage: fr
   deploymentTarget:
     iOS: "17.0"
 settings:
@@ -32,6 +34,8 @@ targets:
         CFBundleDisplayName: NoteFlow
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: fr
+        CFBundleLocalizations: [fr]
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIBackgroundModes: [location, fetch]

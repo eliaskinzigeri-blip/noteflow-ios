@@ -10,6 +10,7 @@ struct NoteFlowApp: App {
         _ = Routine.shared  // localisation et activité en direct prêtes dès le lancement (aussi en arrière-plan)
         if Prefs.school { Reminders.shared.authorize() }
         Inbox.shared.poll(force: true)  // notifications de l'école (notes, informations, devoirs)
+        NoteFlowShortcuts.updateAppShortcutParameters()  // questions à Siri (Siri.swift)
     }
 
     var body: some Scene {

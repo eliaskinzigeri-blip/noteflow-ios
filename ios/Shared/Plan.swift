@@ -18,6 +18,7 @@ struct PlanStep: Codable {
 struct PlanDay: Codable {
     let day: String
     let wake: Double?   // réveil (minutes depuis minuit), recalculé si un prof est absent
+    var bed: Double? = nil  // coucher le soir (minutes depuis le minuit du jour, au-delà de 1440 après minuit)
     let school: Bool?   // jour de cours
     let steps: [PlanStep]
     let sessions: [PlanSession]?  // séances Prépa Basket

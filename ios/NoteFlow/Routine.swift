@@ -284,47 +284,10 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         guard state.kind == "bag" || (state.kind == "free" && evening) else { return }
         var target: PlanDay? = day
         if state.kind != "bag" || evening { target = plan?.days.first(where: { $0.day > day.day }) }
-        if let target, let found = bag(target, now: now) {
-            state.lines = found.0
-            if let weather = found.1 { state.weather = weather }
+        if let target, let found = DayInfo.bag(target, now: now) {
+            state.lines = found.lines
+            if let weather = found.weather { state.weather = weather }
         }
-    }
-
-    /// Sac d'un jour d'école : ses cours, les devoirs à rendre ce jour-là, les évaluations des 3 jours, la météo du matin
-    private func bag(_ day: PlanDay, now: Date) -> ([String], String?)? {
-        var seen = Set<String>()
-        let subjects = day.steps.filter { $0.kind == "lesson" }.map(\.label).filter { seen.insert($0).inserted }
-        guard !subjects.isEmpty, let midnight = PlanClock.midnight(day.day) else { return nil }
-        let when = Calendar.current.isDate(midnight, inSameDayAs: now) ? "Aujourd’hui" : "Demain"
-        var lines = ["\(when) : " + subjects.joined(separator: " · ")]
-        let work = Inbox.shared.work
-        let hw = work.homework.filter { $0.due == day.day }
-        if !hw.isEmpty {
-            lines.append("Devoirs : " + hw.prefix(3).map { w in
-                let text = w.text.count > 28 ? String(w.text.prefix(27)) + "…" : w.text
-                return text.isEmpty ? w.subject : "\(w.subject) (\(text))"
-            }.joined(separator: " · ") + (hw.count > 3 ? " +\(hw.count - 3)" : ""))
-        }
-        let last = PlanClock.dayFormat.string(from: midnight.addingTimeInterval(2 * 86400 + 3600))
-        let evals = work.evals.filter { $0.due >= day.day && $0.due <= last }.sorted { $0.due < $1.due }
-        if !evals.isEmpty {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "fr_FR")
-            f.dateFormat = "EEEE"
-            lines.append("Éval : " + evals.prefix(3).map { e in
-                let date = PlanClock.midnight(e.due).map { e.due == day.day ? "ce jour-là" : f.string(from: $0) } ?? e.due
-                return "\(e.subject) \(date)"
-            }.joined(separator: " · "))
-        }
-        // Météo du trajet du matin
-        let steps = daySteps(day)
-        var weather: String?
-        if let a0 = steps.firstIndex(where: { $0.travel }) {
-            let (a, b) = block(steps, around: a0)
-            weather = Weather.shared.summary(midnight.addingTimeInterval(steps[a].start * 60), midnight.addingTimeInterval(steps[b].end * 60))
-                .map { "\(when == "Demain" ? "Demain matin" : "Ce matin") : \($0)" }
-        }
-        return (lines, weather)
     }
 
     private func hm(_ date: Date) -> String {
