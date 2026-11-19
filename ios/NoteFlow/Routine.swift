@@ -4,9 +4,9 @@ import Foundation
 import UIKit
 import WidgetKit
 
-/// Tient à jour une seule activité en direct, affichée en permanence : l'étape en cours, la navigation
-/// (« arrivée dans », recalculée avec ta vitesse) et la mini-carte pendant les trajets, les séances Prépa Basket,
-/// le temps libre et la nuit. La localisation en arrière-plan garde l'app éveillée pour changer d'étape ;
+/// Tient à jour une seule activité en direct, affichée en permanence : l'étape en cours, la navigation pendant
+/// les trajets (à pied, en bus ou en attente, deviné avec ta vitesse et ta position, et le temps qu'il reste),
+/// les séances Prépa Basket, le temps libre et la nuit. La localisation en arrière-plan garde l'app éveillée pour changer d'étape ;
 /// si iOS ferme l'app, les changements de position importants et les zones maison/collège la relancent.
 final class Routine: NSObject, CLLocationManagerDelegate {
     static let shared = Routine()
@@ -14,10 +14,13 @@ final class Routine: NSObject, CLLocationManagerDelegate {
     private let location = CLLocationManager()
     private var plan: Plan?
     private var here: CLLocation?
-    private var speed: Double = 0  // vitesse lissée (m/s)
+    private let guess = ModeGuess()  // à pied, en bus ou à l'arrêt
+    private var legKey = ""          // trajet en cours (jour|début)
+    private var leg = 0              // étape du trajet atteinte (on n'y revient pas en arrière)
+    private var busEnd: CLLocation?  // en bus : l'arrêt où tu descends
     private var timer: Timer?
     private var last: RoutineAttributes.ContentState?
-    private var traveling = false
+    private var traveling = false  // GPS précis (autour des trajets)
     private var session: AnyObject?  // CLBackgroundActivitySession (iOS 17)
 
     private override init() {
@@ -78,7 +81,7 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    /// Précis pendant un trajet, économe le reste du temps (l'app reste éveillée pour changer d'étape).
+    /// Précis autour des trajets, économe le reste du temps (l'app reste éveillée pour changer d'étape).
     private func tune() {
         location.desiredAccuracy = traveling ? kCLLocationAccuracyBest : kCLLocationAccuracyHundredMeters
         location.distanceFilter = traveling ? 5 : 50
@@ -114,7 +117,7 @@ final class Routine: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let l = locations.last else { return }
-        if l.speed >= 0 && l.horizontalAccuracy < 65 { speed = speed == 0 ? l.speed : speed * 0.7 + l.speed * 0.3 }
+        locations.forEach(guess.add)
         here = l
         refresh()
     }
@@ -140,46 +143,229 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         let minute = now.timeIntervalSince(midnight) / 60
         let today = PlanClock.dayFormat.string(from: now)
         Wake.shared.sync(plan)
+        let nearStop = busEnd.flatMap { end in here.map { $0.distance(from: end) < 200 } } ?? false
+        guess.update(now, nearStop: nearStop)
         guard let day = plan?.days.first(where: { $0.day == today }) else { idle(now, today: today); return }
         let steps = daySteps(day)
         let covering = steps.indices.filter { steps[$0].start <= minute && minute < steps[$0].end && steps[$0].kind != "sleep" }
-        guard let i = covering.first(where: { steps[$0].kind == "session" }) ?? covering.first else {
-            idle(now, today: today)
-            return
-        }
-        let cur = steps[i]
+        let i = covering.first(where: { steps[$0].kind == "session" }) ?? covering.first
 
-        // Arrivée détectée : trajet fini en avance, on passe à l'étape qui suit le déplacement
-        if cur.travel, let after = arrived(steps, around: i, day: today) {
-            if traveling { traveling = false; tune() }
-            let step = steps[after]
-            let next = steps[(after + 1)...].first { $0.kind != "sleep" }
-            let startAt = midnight.addingTimeInterval(step.start * 60)
-            let state = RoutineAttributes.ContentState(
-                title: step.label, detail: "Tu es arrivé · début à \(Routine.clock(step.start))",
-                kind: step.kind, start: now, end: max(startAt, now.addingTimeInterval(60)),
-                next: next.map { "Puis \($0.label) à \(Routine.clock($0.start))" } ?? "", travel: false, path: [], me: nil)
-            show(state, day: today)
-            return
+        // GPS précis autour des trajets (pour deviner un départ en avance ou un retard), économe le reste du temps
+        let precise = steps.contains { $0.travel && $0.start - 25 <= minute && minute < $0.end + 30 }
+        if precise != traveling { traveling = precise; tune() }
+
+        // Trajet : celui du planning, ou un trajet voisin si tu es parti en avance ou pas encore arrivé
+        if i.map({ steps[$0].kind != "session" }) ?? true, let blk = liveBlock(steps, i, minute) {
+            guard let after = arrived(steps, blk, day: today) else {
+                show(travelState(steps, blk, i, now: now, minute: minute, day: today), day: today)
+                return
+            }
+            if minute < steps[after].start {
+                // Arrivée détectée : trajet fini en avance, on annonce l'étape qui suit le déplacement
+                let step = steps[after]
+                let next = steps[(after + 1)...].first { $0.kind != "sleep" }
+                let startAt = midnight.addingTimeInterval(step.start * 60)
+                let state = RoutineAttributes.ContentState(
+                    title: step.label, detail: "Tu es arrivé · début à \(Routine.clock(step.start))",
+                    kind: step.kind, start: now, end: max(startAt, now.addingTimeInterval(60)),
+                    next: next.map { "Puis \($0.label) à \(Routine.clock($0.start))" } ?? "", travel: false)
+                busEnd = nil
+                show(state, day: today)
+                return
+            }
         }
-        if cur.travel != traveling { traveling = cur.travel; tune() }
+        busEnd = nil
+        guard let i, !steps[i].travel else { idle(now, today: today); return }
+        let cur = steps[i]
 
         // Prochaine étape, pour savoir ce qui vient après
         let next = steps[(i + 1)...].first { $0.start >= cur.end - 0.5 && $0.kind != "sleep" && $0.kind != cur.kind }
         let nextText = next.map { "Puis \($0.label) à \(Routine.clock($0.start))" } ?? ""
-
         let start = midnight.addingTimeInterval(cur.start * 60)
         let end = midnight.addingTimeInterval(max(cur.end, cur.start + 1) * 60)
-        var state = RoutineAttributes.ContentState(title: cur.label, detail: cur.detail, kind: cur.kind, start: start, end: end,
-                                                   next: nextText, travel: cur.travel, path: [], me: nil)
-        if cur.travel {
-            (state.path, state.me) = trip(steps, around: i)
-            navigate(&state, steps: steps, i: i, now: now)
-        }
-        show(state, day: today)
+        show(RoutineAttributes.ContentState(title: cur.label, detail: cur.detail, kind: cur.kind, start: start, end: end,
+                                            next: nextText, travel: false), day: today)
     }
 
-    // MARK: Navigation
+    // MARK: Trajets (mode deviné)
+
+    private func loc(_ p: PlanPoint) -> CLLocation { CLLocation(latitude: p.lat, longitude: p.lon) }
+
+    /// Trajet à afficher : celui du planning en cours, ou un trajet voisin si tu bouges déjà (à pied ou en bus)
+    /// en dehors de ses heures : jusqu'à 20 minutes avant son début (parti en avance) et 30 minutes après sa fin
+    /// (pas encore arrivé), à condition d'être sur le chemin.
+    private func liveBlock(_ steps: [PlanStep], _ i: Int?, _ minute: Double) -> (Int, Int)? {
+        if let i, steps[i].travel { return block(steps, around: i) }
+        guard guess.mode == .walk || guess.mode == .bus, let me = here, me.horizontalAccuracy < 100 else { return nil }
+        var k = 0
+        while k < steps.count {
+            guard steps[k].travel else { k += 1; continue }
+            let (a, b) = block(steps, around: k)
+            k = b + 1
+            let early = steps[a].start - 20 <= minute && minute < steps[a].start
+            let late = steps[b].end <= minute && minute < steps[b].end + 30
+            guard early || late, let dest = steps[b].pts.last, let from = legStart(steps, a, first: a) else { continue }
+            if me.distance(from: loc(dest)) < 150 { continue }           // déjà à destination
+            if early && me.distance(from: loc(from)) < 150 { continue }  // pas encore parti
+            let away = (a...b).map { legDistance(me, steps, $0, first: a) }.min() ?? .infinity
+            if away > 2000 { continue }                                  // ailleurs : ce n'est pas ce trajet
+            return (a, b)
+        }
+        return nil
+    }
+
+    /// Point de départ d'une étape de trajet : son premier point, sinon la fin de l'étape d'avant, sinon la maison
+    /// ou le collège (le plus proche de son arrivée).
+    private func legStart(_ steps: [PlanStep], _ k: Int, first a: Int) -> PlanPoint? {
+        let s = steps[k]
+        if s.pts.count > 1 { return s.pts.first }
+        if k > a, let p = steps[k - 1].pts.last { return p }
+        let places = [plan?.home, plan?.school].compactMap { $0 }
+        guard let end = legEnd(steps, k) else { return places.first }
+        return places.min { loc($0).distance(from: loc(end)) < loc($1).distance(from: loc(end)) }
+    }
+
+    /// Point d'arrivée d'une étape : son dernier point (bus : l'arrêt où commence la marche qui suit)
+    private func legEnd(_ steps: [PlanStep], _ k: Int) -> PlanPoint? {
+        if steps[k].kind == "bus" { return k + 1 < steps.count ? steps[k + 1].pts.first : nil }
+        return steps[k].pts.last
+    }
+
+    /// Distance (m) entre toi et le chemin d'une étape (segments entre ses points)
+    private func legDistance(_ me: CLLocation, _ steps: [PlanStep], _ k: Int, first a: Int) -> Double {
+        var line: [PlanPoint] = []
+        if let p = legStart(steps, k, first: a) { line.append(p) }
+        if steps[k].kind == "bus" {
+            if let e = legEnd(steps, k) { line.append(e) }
+        } else {
+            line += steps[k].pts
+        }
+        guard let p0 = line.first else { return .infinity }
+        let lat = me.coordinate.latitude, lon = me.coordinate.longitude
+        let kx = cos(lat * .pi / 180) * 111_320
+        let xy = { (p: PlanPoint) -> (Double, Double) in ((p.lon - lon) * kx, (p.lat - lat) * 110_540) }
+        var best = hypot(xy(p0).0, xy(p0).1)
+        for (u, v) in zip(line, line.dropFirst()) {
+            let (ax, ay) = xy(u), (bx, by) = xy(v)
+            let dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy
+            let t = len > 0 ? min(max(-(ax * dx + ay * dy) / len, 0), 1) : 0
+            best = min(best, hypot(ax + t * dx, ay + t * dy))
+        }
+        return best
+    }
+
+    /// Étape du trajet (celle en cours ou une suivante) qui correspond au mode deviné : la plus proche de toi.
+    /// Une étape plus loin dans le trajet n'est choisie que si elle est nettement plus proche (200 m).
+    private func pick(_ steps: [PlanStep], _ kind: String, _ a: Int, _ b: Int) -> Int? {
+        let ks = (min(max(leg, a), b)...b).filter { steps[$0].kind == kind }
+        guard let me = here, ks.count > 1 else { return ks.first }
+        let d = ks.map { legDistance(me, steps, $0, first: a) }
+        var best = 0
+        for n in 1..<ks.count where d[n] + 200 < d[best] { best = n }
+        return ks[best]
+    }
+
+    /// Trajet en cours, comme un GPS : ce que tu fais (à pied, en bus, attente, deviné avec ta vitesse et ta
+    /// position), l'étape du planning qui y correspond et le temps qu'il reste avant la fin, recalculé en continu.
+    private func travelState(_ steps: [PlanStep], _ blk: (Int, Int), _ i: Int?, now: Date, minute: Double,
+                             day: String) -> RoutineAttributes.ContentState {
+        let (a, b) = blk
+        let key = "\(day)|\(Int(steps[a].start))"
+        if key != legKey { legKey = key; leg = a }
+        let midnight = Calendar.current.startOfDay(for: now)
+        let at = { (m: Double) in midnight.addingTimeInterval(m * 60) }
+
+        let kind: String
+        var j: Int?    // étape du planning qui correspond à ce que tu fais (nil : aucune, on vise la fin du trajet)
+        var bus: Int?  // attente : le bus attendu
+        switch guess.mode {
+        case nil:
+            // Pas encore de vitesse fiable : on suit le planning
+            let p = i.flatMap { steps[$0].travel ? $0 : nil } ?? (minute < steps[a].start ? a : b)
+            j = p
+            kind = steps[p].kind
+            if kind == "wait" { bus = (p...b).first { steps[$0].kind == "bus" } }
+        case .walk?:
+            kind = "walk"
+            j = pick(steps, "walk", a, b)
+        case .bus?:
+            kind = "bus"
+            j = pick(steps, "bus", a, b)
+        case .wait?:
+            // Immobile près de l'arrêt d'un bus à prendre : attente du bus ; ailleurs : simple pause
+            bus = (min(max(leg, a), b)...b).first { k in
+                guard steps[k].kind == "bus", let p = legStart(steps, k, first: a), let me = here else { return false }
+                return me.distance(from: loc(p)) < 250
+            }
+            if let bus {
+                kind = "wait"
+                j = bus > a && steps[bus - 1].kind == "wait" ? bus - 1 : bus
+            } else {
+                kind = "pause"
+                j = min(max(leg, a), b)
+            }
+        }
+        if let j, guess.mode == .walk || guess.mode == .bus { leg = max(leg, j) }
+
+        // Destination de ce que tu fais
+        let t = j ?? b
+        var (dest, name) = target(steps, t)
+        if kind == "wait", let bus, steps[t].kind == "bus" {
+            dest = legStart(steps, bus, first: a)
+            name = steps[bus].detail.components(separatedBy: "→").first?.trimmingCharacters(in: .whitespaces) ?? ""
+        }
+
+        // Ce qui vient après
+        let base = kind == "wait" ? (bus ?? t) : t
+        let n = steps[(base + 1)...].first { $0.kind != "sleep" && $0.kind != "wait" && $0.kind != kind }
+        var nextText = ""
+        if let n {
+            let label = n.label.prefix(1).lowercased() + n.label.dropFirst()
+            nextText = n.travel && n.kind != "bus" ? "Puis \(label)" : "Puis \(n.label) à \(Routine.clock(n.start))"
+        }
+
+        let planned = at(steps[t].end)
+        let title = j.map { steps[$0].label } ?? (kind == "bus" ? "En bus" : "")
+        var state = RoutineAttributes.ContentState(title: title, detail: "", kind: kind,
+                                                   start: guess.mode == nil ? at(steps[t].start) : guess.since,
+                                                   end: planned, next: nextText, travel: true)
+        state.dest = name
+        var eta = planned
+        if kind == "wait" {
+            // Le bus part à l'heure prévue (pas de temps réel sur les cars régionaux)
+            eta = at(steps[bus ?? t].start)
+            if eta < now.addingTimeInterval(30) {
+                eta = now.addingTimeInterval(60)
+                state.detail = "Bus en retard"
+            }
+            let waited = max(0, now.timeIntervalSince(state.start)), left = eta.timeIntervalSince(now)
+            state.progress = waited + left > 0 ? waited / (waited + left) : 0
+        } else if let dest, let me = here, me.horizontalAccuracy < 200 {
+            let to = loc(dest)
+            let factor = kind == "bus" ? 1.25 : 1.3  // détours des rues
+            let left = me.distance(from: to) * factor
+            if left < 30_000 {
+                let total = legStart(steps, t, first: a).map { loc($0).distance(from: to) * factor } ?? left
+                state.meters = left
+                state.progress = total > 1 ? min(1, max(0, 1 - left / total)) : 0
+                switch kind {
+                case "bus":
+                    let est = now.addingTimeInterval(left / (guess.busSpeed(now) ?? 8))
+                    // Début du trajet en bus : l'horaire prévu compte encore pour moitié
+                    let blend = guess.ride(now) < 180 && planned > now && steps[t].kind == "bus"
+                    eta = blend ? est.addingTimeInterval(planned.timeIntervalSince(est) / 2) : est
+                case "pause":
+                    eta = now.addingTimeInterval(left / (steps[t].kind == "bus" ? 8 : 1.25))
+                default:
+                    eta = now.addingTimeInterval(left / guess.walkSpeed(now))
+                }
+            }
+        }
+        state.eta = eta
+        state.end = max(eta, now.addingTimeInterval(30))
+        busEnd = kind == "bus" ? dest.map(loc) : nil
+        return state
+    }
 
     /// Destination de l'étape : arrêt, collège ou maison (point et nom)
     private func target(_ steps: [PlanStep], _ i: Int) -> (PlanPoint?, String) {
@@ -188,7 +374,7 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         case "bus":
             // L'étape du bus n'a pas de points : l'arrêt d'arrivée est le départ de la marche qui suit
             let name = s.detail.components(separatedBy: "→").last?.trimmingCharacters(in: .whitespaces) ?? ""
-            return (i + 1 < steps.count ? steps[i + 1].pts.first : nil, name)
+            return (legEnd(steps, i), name)
         case "wait":
             return (s.pts.last, s.label.replacingOccurrences(of: "Attente à ", with: ""))
         default:
@@ -199,39 +385,6 @@ final class Routine: NSObject, CLLocationManagerDelegate {
             }
             return (s.pts.last, name.prefix(1).uppercased() + name.dropFirst())
         }
-    }
-
-    /// Heure d'arrivée recalculée avec la position et la vitesse : marche (4,5 km/h par défaut, ta vitesse si tu
-    /// marches plus vite), bus (horaire prévu, ou ta vitesse dans le bus s'il roule). Attente : départ du bus.
-    private func navigate(_ state: inout RoutineAttributes.ContentState, steps: [PlanStep], i: Int, now: Date) {
-        let s = steps[i]
-        let (dest, name) = target(steps, i)
-        state.dest = name
-        guard s.kind != "wait" else {
-            state.eta = state.end  // le bus part à l'heure prévue (pas de temps réel sur les cars régionaux)
-            return
-        }
-        guard let dest, let me = here, me.horizontalAccuracy < 200 else { state.eta = state.end; return }
-        let to = CLLocation(latitude: dest.lat, longitude: dest.lon)
-        let factor = s.kind == "bus" ? 1.25 : 1.3  // détours des rues
-        let left = me.distance(from: to) * factor
-        guard left < 30_000 else { state.eta = state.end; return }
-
-        // Départ de l'étape : point précédent (sinon la maison) pour la barre de progression
-        let from = s.pts.count > 1 ? s.pts.first : (i > 0 ? steps[i - 1].pts.last : nil) ?? plan?.home
-        let total = from.map { CLLocation(latitude: $0.lat, longitude: $0.lon).distance(from: to) * factor } ?? left
-        state.meters = left
-        state.progress = total > 1 ? min(1, max(0, 1 - left / total)) : 0
-
-        let eta: Date
-        if s.kind == "bus" {
-            eta = speed > 3 ? now.addingTimeInterval(left / speed) : max(state.end, now.addingTimeInterval(left / 9))
-        } else {
-            let v = speed > 0.7 ? min(max(speed, 1.0), 3.0) : 1.25
-            eta = now.addingTimeInterval(left / v)
-        }
-        state.eta = eta
-        state.end = max(state.end, eta)
     }
 
     // MARK: Hors étape
@@ -264,7 +417,7 @@ final class Routine: NSObject, CLLocationManagerDelegate {
             detail: sleeping ? (wake ?? "") : "",
             kind: sleeping ? "sleep" : "free", start: min(prevEnd, now), end: at,
             next: "Ensuite : \(n.kind == "lesson" ? "cours de \(n.label)" : n.label) à \(when)",
-            travel: false, path: [], me: nil)
+            travel: false)
         show(state, day: today)
     }
 
@@ -278,9 +431,9 @@ final class Routine: NSObject, CLLocationManagerDelegate {
 
     /// Élève déjà à destination (à moins de 120 m de la fin du trajet) : index de l'étape d'après.
     /// L'arrivée vaut pour tout le déplacement.
-    private func arrived(_ steps: [PlanStep], around i: Int, day: String) -> Int? {
+    private func arrived(_ steps: [PlanStep], _ blk: (Int, Int), day: String) -> Int? {
         guard Prefs.arrival else { return nil }
-        let (a, b) = block(steps, around: i)
+        let (a, b) = blk
         guard b + 1 < steps.count else { return nil }
         let key = "\(day)|\(Int(steps[a].start))"
         if UserDefaults.standard.string(forKey: "arrived") == key { return b + 1 }
@@ -296,13 +449,13 @@ final class Routine: NSObject, CLLocationManagerDelegate {
     private func changed(_ a: RoutineAttributes.ContentState?, _ b: RoutineAttributes.ContentState) -> Bool {
         guard let a else { return true }
         var x = a, y = b
-        x.eta = nil; y.eta = nil; x.meters = nil; y.meters = nil; x.progress = nil; y.progress = nil; x.me = nil; y.me = nil
-        x.end = y.end
+        x.eta = nil; y.eta = nil; x.meters = nil; y.meters = nil; x.progress = nil; y.progress = nil
+        x.end = y.end; x.start = y.start
         if x != y { return true }
         if abs((a.eta ?? a.end).timeIntervalSince(b.eta ?? b.end)) >= 8 { return true }
-        if abs((a.progress ?? 0) - (b.progress ?? 0)) >= 0.02 { return true }
-        if let p = a.me, let q = b.me, hypot(p.x - q.x, p.y - q.y) >= 0.02 { return true }
-        return (a.me == nil) != (b.me == nil)
+        if abs(a.end.timeIntervalSince(b.end)) >= 8 || abs(a.start.timeIntervalSince(b.start)) >= 8 { return true }
+        if abs((a.meters ?? 0) - (b.meters ?? 0)) >= 20 { return true }
+        return abs((a.progress ?? 0) - (b.progress ?? 0)) >= 0.02
     }
 
     private func show(_ state: RoutineAttributes.ContentState, day: String) {
@@ -324,48 +477,5 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         } catch {
             last = nil  // refusé hors de l'app : nouvel essai à la prochaine ouverture
         }
-    }
-
-    // MARK: Mini-carte
-
-    /// Tracé du trajet en cours (étapes de déplacement qui se suivent) et position actuelle, ramenés entre 0 et 1.
-    private func trip(_ steps: [PlanStep], around i: Int) -> ([MapPoint], MapPoint?) {
-        let (a, b) = block(steps, around: i)
-        var pts = steps[a...b].flatMap { $0.pts }.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
-        // Trajet du matin : il part de la maison, que l'étape « Marche jusqu'à l'arrêt » ne donne pas
-        if let h = plan?.home, let first = pts.first, let lastPt = pts.last {
-            let home = CLLocation(latitude: h.lat, longitude: h.lon)
-            let far = { (c: CLLocationCoordinate2D) in home.distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude)) > 150 }
-            if far(first) && far(lastPt) { pts.insert(CLLocationCoordinate2D(latitude: h.lat, longitude: h.lon), at: 0) }
-        }
-        // Points en double (arrivée d'une étape = départ de la suivante)
-        var clean: [CLLocationCoordinate2D] = []
-        for p in pts {
-            if let q = clean.last, CLLocation(latitude: q.latitude, longitude: q.longitude)
-                .distance(from: CLLocation(latitude: p.latitude, longitude: p.longitude)) < 20 { continue }
-            clean.append(p)
-        }
-        var all = clean
-        var mine: CLLocationCoordinate2D?
-        if let h = here?.coordinate, let c = clean.first,
-           CLLocation(latitude: h.latitude, longitude: h.longitude).distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude)) < 20_000 {
-            mine = h
-            all.append(h)
-        }
-        guard !all.isEmpty else { return ([], nil) }
-
-        // Projection simple (degrés de longitude raccourcis selon la latitude), même échelle sur les deux axes
-        let lat0 = all.map { $0.latitude }.reduce(0, +) / Double(all.count)
-        let k = cos(lat0 * .pi / 180)
-        let xs = all.map { $0.longitude * k }, ys = all.map { $0.latitude }
-        let minX = xs.min()!, maxX = xs.max()!, minY = ys.min()!, maxY = ys.max()!
-        let span = max(maxX - minX, maxY - minY, 0.002)
-        let cx = (minX + maxX) / 2, cy = (minY + maxY) / 2
-        let pad = 0.14
-        let norm = { (c: CLLocationCoordinate2D) -> MapPoint in
-            MapPoint(x: 0.5 + (c.longitude * k - cx) / span * (1 - 2 * pad),
-                     y: 0.5 - (c.latitude - cy) / span * (1 - 2 * pad))
-        }
-        return (Array(clean.map(norm).prefix(24)), mine.map(norm))
     }
 }

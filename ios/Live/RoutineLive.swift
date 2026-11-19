@@ -65,7 +65,7 @@ func icon(_ kind: String) -> String {
     switch kind {
     case "bus": return "bus.fill"
     case "walk": return "figure.walk"
-    case "wait": return "clock"
+    case "wait", "pause": return "clock"
     case "lesson": return "book.fill"
     case "sport", "move": return "figure.run"
     case "session": return "basketball.fill"
@@ -98,15 +98,20 @@ func navTitle(_ s: RoutineAttributes.ContentState) -> String {
     case "walk": return "À pied\(dist)"
     case "bus": return "\(s.title)\(dist)"
     case "wait": return "Attente du bus"
-    default: return "\(s.title)\(dist)"
+    case "pause": return "En attente"
+    default: return "\(s.title.isEmpty ? "En route" : s.title)\(dist)"
     }
 }
 
-/// « Arrivée à 8h20 · Place » (attente : « Bus à 8h20 · Place »)
+/// « Arrivée à 8h20 · Place » (attente : « Bus à 8h20 · Place », pause : « Si tu repars, arrivée à 8h20 »)
 func arrival(_ s: RoutineAttributes.ContentState) -> String {
     let at = hm(s.eta ?? s.end)
     let place = (s.dest ?? "").isEmpty ? "" : " · \(s.dest!)"
-    return s.kind == "wait" ? "Bus à \(at)\(place)" : "Arrivée à \(at)\(place)"
+    switch s.kind {
+    case "wait": return s.detail.isEmpty ? "Bus à \(at)\(place)" : "\(s.detail)\(place)"
+    case "pause": return "Si tu repars, arrivée à \(at)\(place)"
+    default: return "Arrivée à \(at)\(place)"
+    }
 }
 
 /// Compte à rebours sur une seule ligne : « arrivée dans 2:26 » en trajet, temps restant sinon.
@@ -148,7 +153,7 @@ struct Track: View {
                 ZStack {
                     Circle().fill(Color.white)
                     Circle().stroke(NF.ink, lineWidth: 2.5)
-                    Image(systemName: kind == "bus" ? "bus.fill" : kind == "wait" ? "clock.fill" : "location.north.fill")
+                    Image(systemName: kind == "bus" ? "bus.fill" : kind == "wait" || kind == "pause" ? "clock.fill" : "location.north.fill")
                         .font(.system(size: 8, weight: .bold))
                         .rotationEffect(kind == "walk" ? .degrees(90) : .zero)
                         .foregroundStyle(NF.ink)
@@ -168,7 +173,7 @@ struct LockScreenView: View {
         if state.travel { travel } else { step }
     }
 
-    /// Trajet : comme un GPS, avec la mini-carte
+    /// Trajet : comme un GPS, avec à droite ce que tu fais (marche, bus ou horloge pour l'attente)
     private var travel: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
@@ -188,9 +193,7 @@ struct LockScreenView: View {
                     Text(state.next).font(.caption2).foregroundStyle(NF.soft).lineLimit(1)
                 }
             }
-            if !state.path.isEmpty {
-                MiniMap(path: state.path, me: state.me).frame(width: 84, height: 84)
-            }
+            ModeBadge(kind: state.kind).frame(width: 74)
         }
         .foregroundStyle(.white)
     }
@@ -218,36 +221,40 @@ struct LockScreenView: View {
     }
 }
 
-/// Mini-carte du trajet : le tracé, le départ (point plein), l'arrivée (rond) et ta position (point blanc).
-struct MiniMap: View {
-    let path: [MapPoint]
-    let me: MapPoint?
+/// Indicateur du trajet, deviné avec ta vitesse : un marcheur à pied, un bus en bus, une horloge en attente.
+struct ModeBadge: View {
+    let kind: String
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width, h = geo.size.height
-            let pts = path.map { CGPoint(x: $0.x * w, y: $0.y * h) }
+        VStack(spacing: 6) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.08))
-                Path { line in
-                    guard let first = pts.first else { return }
-                    line.move(to: first)
-                    for p in pts.dropFirst() { line.addLine(to: p) }
-                }
-                .stroke(Color.white.opacity(0.85), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                if let first = pts.first {
-                    Circle().fill(Color.white).frame(width: 7, height: 7).position(first)
-                }
-                if let end = pts.last, pts.count > 1 {
-                    Circle().stroke(Color.white, lineWidth: 2).frame(width: 11, height: 11).position(end)
-                }
-                if let m = me {
-                    Circle().fill(Color.white)
-                        .overlay(Circle().stroke(NF.ink, lineWidth: 3))
-                        .frame(width: 12, height: 12)
-                        .position(x: m.x * w, y: m.y * h)
-                }
+                Circle().fill(Color.white)
+                Image(systemName: symbol)
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(NF.ink)
             }
+            .frame(width: 58, height: 58)
+            Text(word)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(NF.soft)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    private var symbol: String {
+        switch kind {
+        case "bus": return "bus.fill"
+        case "walk": return "figure.walk"
+        default: return "clock.fill"
+        }
+    }
+
+    private var word: String {
+        switch kind {
+        case "bus": return "En bus"
+        case "walk": return "À pied"
+        default: return "Attente"
         }
     }
 }

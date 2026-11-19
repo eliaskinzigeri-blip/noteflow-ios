@@ -1,6 +1,6 @@
 # NoteFlow pour iPhone
 
-App iPhone de [NoteFlow](https://noteflow-silk-kappa.vercel.app) : le site en plein écran, la localisation en arrière-plan et une activité en direct (écran verrouillé, Dynamic Island) avec mini-carte des trajets.
+App iPhone de [NoteFlow](https://noteflow-silk-kappa.vercel.app) : le site en plein écran, la localisation en arrière-plan et une activité en direct (écran verrouillé, Dynamic Island) qui devine si tu marches, es dans le bus ou attends, et le temps qu’il reste.
 
 GitHub Actions compile l’app à chaque envoi et publie `NoteFlow.ipa` dans la version [latest](../../releases/tag/latest). Elle s’installe avec SideStore, qui la signe avec ton identifiant Apple.
 
