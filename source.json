@@ -17,12 +17,12 @@
       "category": "education",
       "versions": [
         {
-          "version": "1.0.16",
-          "buildVersion": "16",
-          "date": "2026-11-19T14:24:18Z",
-          "localizedDescription": "Nouvelle version",
-          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.16/NoteFlow.ipa",
-          "size": 492398,
+          "version": "1.0.17",
+          "buildVersion": "17",
+          "date": "2026-11-19T14:57:45Z",
+          "localizedDescription": "App iPhone : pars maintenant, plan B si bus raté, météo, sac du lendemain et boutons du Centre de contrôle",
+          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.17/NoteFlow.ipa",
+          "size": 492399,
           "minOSVersion": "17.0"
         }
       ],
