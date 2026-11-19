@@ -17,12 +17,12 @@
       "category": "education",
       "versions": [
         {
-          "version": "1.0.13",
-          "buildVersion": "13",
-          "date": "2026-11-19T12:36:33Z",
+          "version": "1.0.14",
+          "buildVersion": "14",
+          "date": "2026-11-19T12:39:52Z",
           "localizedDescription": "Nouvelle version",
-          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.13/NoteFlow.ipa",
-          "size": 421863,
+          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.14/NoteFlow.ipa",
+          "size": 432274,
           "minOSVersion": "17.0"
         }
       ],
