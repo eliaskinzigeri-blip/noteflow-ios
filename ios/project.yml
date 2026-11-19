@@ -35,6 +35,10 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIBackgroundModes: [location, fetch]
+        # Liens noteflow://open?to=notes : boutons du Centre de contrôle et de l'écran verrouillé
+        CFBundleURLTypes:
+          - CFBundleURLName: com.noteflow.app
+            CFBundleURLSchemes: [noteflow]
         BGTaskSchedulerPermittedIdentifiers: [com.noteflow.app.refresh]
         NSLocationWhenInUseUsageDescription: "NoteFlow suit ton trajet pour te guider jusqu’à l’arrêt et au collège."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Avec « Toujours », l’activité en direct de ton écran verrouillé suit ton trajet même quand NoteFlow est fermé."

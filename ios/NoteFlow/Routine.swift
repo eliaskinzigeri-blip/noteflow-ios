@@ -18,6 +18,12 @@ final class Routine: NSObject, CLLocationManagerDelegate {
     private var legKey = ""          // trajet en cours (jour|début)
     private var leg = 0              // étape du trajet atteinte (on n'y revient pas en arrière)
     private var busEnd: CLLocation?  // en bus : l'arrêt où tu descends
+    private let d = UserDefaults.standard
+    /// Ta vitesse de marche habituelle (m/s), apprise pendant tes trajets à pied
+    private var pace: Double {
+        get { d.object(forKey: "walkPace") == nil ? 1.25 : min(max(d.double(forKey: "walkPace"), 0.9), 2.2) }
+        set { d.set(newValue, forKey: "walkPace") }
+    }
     private var timer: Timer?
     private var last: RoutineAttributes.ContentState?
     private var traveling = false  // GPS précis (autour des trajets)
@@ -45,6 +51,7 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         UserDefaults.standard.set(data, forKey: "plan")
         SharedStore.defaults.set(data, forKey: "plan")
         WidgetCenter.shared.reloadAllTimelines()
+        if #available(iOS 18.0, *) { ControlCenter.shared.reloadAllControls() }
         Reminders.shared.schedule(p)
         Wake.shared.sync(p)
         startLocation()
@@ -145,7 +152,13 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         Wake.shared.sync(plan)
         let nearStop = busEnd.flatMap { end in here.map { $0.distance(from: end) < 200 } } ?? false
         guess.update(now, nearStop: nearStop)
-        guard let day = plan?.days.first(where: { $0.day == today }) else { idle(now, today: today); return }
+        if guess.mode == .walk, now.timeIntervalSince(guess.since) > 60, let v = guess.walkSpeed(now) { pace = pace * 0.9 + v * 0.1 }
+        if let p = plan?.home { Weather.shared.update(lat: p.lat, lon: p.lon) }
+        else if let h = here { Weather.shared.update(lat: h.coordinate.latitude, lon: h.coordinate.longitude) }
+        guard let day = plan?.days.first(where: { $0.day == today }) else {
+            if let state = idle(now) { show(state, day: today) }
+            return
+        }
         let steps = daySteps(day)
         let covering = steps.indices.filter { steps[$0].start <= minute && minute < steps[$0].end && steps[$0].kind != "sleep" }
         let i = covering.first(where: { steps[$0].kind == "session" }) ?? covering.first
@@ -157,6 +170,8 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         // Trajet : celui du planning, ou un trajet voisin si tu es parti en avance ou pas encore arrivé
         if i.map({ steps[$0].kind != "session" }) ?? true, let blk = liveBlock(steps, i, minute) {
             guard let after = arrived(steps, blk, day: today) else {
+                // En route pour de bon : l'alerte « Pars maintenant » de ce trajet ne sert plus
+                if guess.mode == .walk || guess.mode == .bus { leftHome("\(today)|\(Int(steps[blk.0].start))") }
                 show(travelState(steps, blk, i, now: now, minute: minute, day: today), day: today)
                 return
             }
@@ -175,7 +190,13 @@ final class Routine: NSObject, CLLocationManagerDelegate {
             }
         }
         busEnd = nil
-        guard let i, !steps[i].travel else { idle(now, today: today); return }
+        guard let i, !steps[i].travel else {
+            if var state = idle(now) {
+                extras(&state, steps, day: day, now: now, minute: minute)
+                show(state, day: today)
+            }
+            return
+        }
         let cur = steps[i]
 
         // Prochaine étape, pour savoir ce qui vient après
@@ -183,8 +204,132 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         let nextText = next.map { "Puis \($0.label) à \(Routine.clock($0.start))" } ?? ""
         let start = midnight.addingTimeInterval(cur.start * 60)
         let end = midnight.addingTimeInterval(max(cur.end, cur.start + 1) * 60)
-        show(RoutineAttributes.ContentState(title: cur.label, detail: cur.detail, kind: cur.kind, start: start, end: end,
-                                            next: nextText, travel: false), day: today)
+        var state = RoutineAttributes.ContentState(title: cur.label, detail: cur.detail, kind: cur.kind, start: start, end: end,
+                                                   next: nextText, travel: false)
+        extras(&state, steps, day: day, now: now, minute: minute)
+        show(state, day: today)
+    }
+
+    // MARK: Départ, météo et sac
+
+    /// Temps de marche (s) d'ici jusqu'à un point, à ta vitesse habituelle (nil sans position fiable ou trop loin)
+    private func walkTime(to p: PlanPoint) -> TimeInterval? {
+        guard let me = here, me.horizontalAccuracy < 200 else { return nil }
+        let m = me.distance(from: loc(p))
+        guard m < 4000 else { return nil }
+        return m < 40 ? 0 : m * 1.3 / pace
+    }
+
+    private struct Leave { let at: Date; let what: String; let key: String }
+
+    /// Heure où partir pour le prochain trajet (dans moins de 90 minutes) : être à l'arrêt 2 minutes avant le bus,
+    /// ou à destination à l'heure prévue. Calculée avec ta position et ta vitesse de marche ; sans position, l'heure du planning.
+    private func leave(_ steps: [PlanStep], day: String, now: Date, minute: Double) -> Leave? {
+        guard let a0 = steps.indices.first(where: { steps[$0].travel && steps[$0].start >= minute - 1 && steps[$0].start - minute < 90 }) else { return nil }
+        let (a, b) = block(steps, around: a0)
+        let key = "\(day)|\(Int(steps[a].start))"
+        let midnight = Calendar.current.startOfDay(for: now)
+        let at = { (m: Double) in midnight.addingTimeInterval(m * 60) }
+        if let k = (a...b).first(where: { steps[$0].kind == "bus" }) {
+            let need = legStart(steps, k, first: a).flatMap(walkTime).map { $0 + 120 } ?? (steps[k].start - steps[a].start) * 60
+            return Leave(at: at(steps[k].start).addingTimeInterval(-need), what: "\(steps[k].label) à \(Routine.clock(steps[k].start))", key: key)
+        }
+        let need = steps[b].pts.last.flatMap(walkTime).map { $0 + 60 } ?? (steps[b].end - steps[a].start) * 60
+        let (_, name) = target(steps, b)
+        return Leave(at: at(steps[b].end).addingTimeInterval(-need), what: "\(name) à \(Routine.clock(steps[b].end))", key: key)
+    }
+
+    /// Notification « Pars maintenant », programmée à l'heure de départ et recalée quand elle bouge
+    private func notifyLeave(_ l: Leave, _ now: Date) {
+        guard Prefs.leave, d.string(forKey: "leaveDone") != l.key else { return }
+        if l.at <= now.addingTimeInterval(20) {
+            // Pas programmée pour ce trajet (app ouverte tard) : tout de suite, si le départ n'est pas déjà loin
+            if d.string(forKey: "leaveKey") != l.key, now.timeIntervalSince(l.at) < 600 {
+                Reminders.shared.post(id: "leave", title: "Pars maintenant", body: l.what, url: "#/routine")
+            }
+            d.set(l.key, forKey: "leaveDone")
+            return
+        }
+        if d.string(forKey: "leaveKey") != l.key || abs(d.double(forKey: "leaveAt") - l.at.timeIntervalSince1970) >= 30 {
+            if d.string(forKey: "leaveKey") != l.key { Reminders.shared.authorize() }
+            Reminders.shared.post(id: "leave", title: "Pars maintenant", body: l.what, url: "#/routine", at: l.at)
+            d.set(l.at.timeIntervalSince1970, forKey: "leaveAt")
+            d.set(l.key, forKey: "leaveKey")
+        }
+    }
+
+    /// Parti (à pied ou en bus) : plus d'alerte de départ pour ce trajet
+    private func leftHome(_ key: String) {
+        guard d.string(forKey: "leaveDone") != key else { return }
+        d.set(key, forKey: "leaveDone")
+        if d.string(forKey: "leaveKey") == key { Reminders.shared.cancel("leave") }
+    }
+
+    /// Ajouts hors trajet : heure de départ (« Pars à 7h32 »), météo du prochain trajet, sac du lendemain
+    private func extras(_ state: inout RoutineAttributes.ContentState, _ steps: [PlanStep], day: PlanDay, now: Date, minute: Double) {
+        let midnight = Calendar.current.startOfDay(for: now)
+        if let l = leave(steps, day: day.day, now: now, minute: minute) {
+            if l.at.timeIntervalSince(now) < 3600 {
+                state.next = l.at <= now ? "Pars maintenant · \(l.what)" : "Pars à \(hm(l.at)) · \(l.what)"
+            }
+            notifyLeave(l, now)
+        }
+        // Météo du prochain trajet (dans moins de 2 heures)
+        if let a0 = steps.indices.first(where: { steps[$0].travel && steps[$0].start >= minute - 1 && steps[$0].start - minute < 120 }) {
+            let (a, b) = block(steps, around: a0)
+            state.weather = Weather.shared.summary(midnight.addingTimeInterval(steps[a].start * 60), midnight.addingTimeInterval(steps[b].end * 60))
+        }
+        // Sac : pendant l'étape « Faire son sac », et le soir en temps libre
+        let evening = minute >= 17 * 60
+        guard state.kind == "bag" || (state.kind == "free" && evening) else { return }
+        var target: PlanDay? = day
+        if state.kind != "bag" || evening { target = plan?.days.first(where: { $0.day > day.day }) }
+        if let target, let found = bag(target, now: now) {
+            state.lines = found.0
+            if let weather = found.1 { state.weather = weather }
+        }
+    }
+
+    /// Sac d'un jour d'école : ses cours, les devoirs à rendre ce jour-là, les évaluations des 3 jours, la météo du matin
+    private func bag(_ day: PlanDay, now: Date) -> ([String], String?)? {
+        var seen = Set<String>()
+        let subjects = day.steps.filter { $0.kind == "lesson" }.map(\.label).filter { seen.insert($0).inserted }
+        guard !subjects.isEmpty, let midnight = PlanClock.midnight(day.day) else { return nil }
+        let when = Calendar.current.isDate(midnight, inSameDayAs: now) ? "Aujourd’hui" : "Demain"
+        var lines = ["\(when) : " + subjects.joined(separator: " · ")]
+        let work = Inbox.shared.work
+        let hw = work.homework.filter { $0.due == day.day }
+        if !hw.isEmpty {
+            lines.append("Devoirs : " + hw.prefix(3).map { w in
+                let text = w.text.count > 28 ? String(w.text.prefix(27)) + "…" : w.text
+                return text.isEmpty ? w.subject : "\(w.subject) (\(text))"
+            }.joined(separator: " · ") + (hw.count > 3 ? " +\(hw.count - 3)" : ""))
+        }
+        let last = PlanClock.dayFormat.string(from: midnight.addingTimeInterval(2 * 86400 + 3600))
+        let evals = work.evals.filter { $0.due >= day.day && $0.due <= last }.sorted { $0.due < $1.due }
+        if !evals.isEmpty {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "fr_FR")
+            f.dateFormat = "EEEE"
+            lines.append("Éval : " + evals.prefix(3).map { e in
+                let date = PlanClock.midnight(e.due).map { e.due == day.day ? "ce jour-là" : f.string(from: $0) } ?? e.due
+                return "\(e.subject) \(date)"
+            }.joined(separator: " · "))
+        }
+        // Météo du trajet du matin
+        let steps = daySteps(day)
+        var weather: String?
+        if let a0 = steps.firstIndex(where: { $0.travel }) {
+            let (a, b) = block(steps, around: a0)
+            weather = Weather.shared.summary(midnight.addingTimeInterval(steps[a].start * 60), midnight.addingTimeInterval(steps[b].end * 60))
+                .map { "\(when == "Demain" ? "Demain matin" : "Ce matin") : \($0)" }
+        }
+        return (lines, weather)
+    }
+
+    private func hm(_ date: Date) -> String {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return String(format: "%dh%02d", c.hour ?? 0, c.minute ?? 0)
     }
 
     // MARK: Trajets (mode deviné)
@@ -300,12 +445,46 @@ final class Routine: NSObject, CLLocationManagerDelegate {
             if let bus {
                 kind = "wait"
                 j = bus > a && steps[bus - 1].kind == "wait" ? bus - 1 : bus
+            } else if leg == a, let me = here, let p = legStart(steps, a, first: a), me.distance(from: loc(p)) < 150 {
+                // Pas encore parti (à la maison, au collège) : l'étape du planning, pas une « pause »
+                kind = steps[a].kind
+                j = a
             } else {
                 kind = "pause"
                 j = min(max(leg, a), b)
             }
         }
         if let j, guess.mode == .walk || guess.mode == .bus { leg = max(leg, j) }
+
+        // Bus encore à prendre dans ce trajet : celui que tu peux attraper (à l'arrêt, un bus en retard
+        // de 5 minutes compte encore). Si ce n'est plus celui du planning : plan B (bus suivant, ou à pied).
+        var catchRun: PlanBus?
+        var planB: String?
+        let ahead = kind == "bus" ? nil : (bus ?? (min(max(leg, a), b)...b).first { steps[$0].kind == "bus" })
+        if let k = ahead {
+            let list = runs(steps[k])
+            let walk = kind == "wait" ? 0 : (legStart(steps, k, first: a).flatMap(walkTime) ?? 0)
+            let ready = now.addingTimeInterval(kind == "wait" ? -300 : walk - 30)
+            catchRun = list.first { at($0.dep) >= ready }
+            if catchRun != list[0] {
+                let first = Routine.clock(list[0].dep)
+                var text: String
+                if let r = catchRun {
+                    let tail = k + 1 <= b && steps[k + 1].kind == "walk" ? steps[k + 1].end - steps[k + 1].start : 0
+                    text = "Prochain bus \(Routine.clock(r.dep)), arrivée \(Routine.clock(r.arr + tail))"
+                } else {
+                    text = "Plus de bus après \(first)"
+                }
+                if let end = steps[b].pts.last, let w = walkTime(to: end), w < 7200 { text += " · à pied : \(hm(now.addingTimeInterval(w)))" }
+                planB = text
+                let id = "\(key)|\(catchRun.map { Int($0.dep) } ?? -1)"
+                if Prefs.leave, d.string(forKey: "missedKey") != id {
+                    d.set(id, forKey: "missedKey")
+                    let title = at(list[0].dep) > now ? "Tu vas rater le bus de \(first)" : "Bus de \(first) raté"
+                    Reminders.shared.post(id: "missed", title: title, body: text, url: "#/routine")
+                }
+            }
+        }
 
         // Destination de ce que tu fais
         let t = j ?? b
@@ -324,7 +503,13 @@ final class Routine: NSObject, CLLocationManagerDelegate {
             nextText = n.travel && n.kind != "bus" ? "Puis \(label)" : "Puis \(n.label) à \(Routine.clock(n.start))"
         }
 
-        let planned = at(steps[t].end)
+        var planned = at(steps[t].end)
+        if kind == "bus", steps[t].kind == "bus" {
+            // Bus pris : le passage parti juste avant ta montée (le suivant si tu as raté celui du planning)
+            let list = runs(steps[t])
+            let board = guess.mode == .bus ? guess.since.addingTimeInterval(120) : now.addingTimeInterval(120)
+            planned = at((list.last { at($0.dep) <= board } ?? list[0]).arr)
+        }
         let title = j.map { steps[$0].label } ?? (kind == "bus" ? "En bus" : "")
         var state = RoutineAttributes.ContentState(title: title, detail: "", kind: kind,
                                                    start: guess.mode == nil ? at(steps[t].start) : guess.since,
@@ -333,8 +518,13 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         var eta = planned
         if kind == "wait" {
             // Le bus part à l'heure prévue (pas de temps réel sur les cars régionaux)
-            eta = at(steps[bus ?? t].start)
-            if eta < now.addingTimeInterval(30) {
+            let first = at(steps[bus ?? t].start)
+            eta = catchRun.map { at($0.dep) } ?? now.addingTimeInterval(60)
+            if catchRun == nil {
+                state.detail = "Plus de bus"
+            } else if eta > first.addingTimeInterval(30) {
+                state.detail = "Bus de \(Routine.clock(steps[bus ?? t].start)) passé · prochain à \(hm(eta))"
+            } else if eta < now.addingTimeInterval(30) {
                 eta = now.addingTimeInterval(60)
                 state.detail = "Bus en retard"
             }
@@ -357,14 +547,20 @@ final class Routine: NSObject, CLLocationManagerDelegate {
                 case "pause":
                     eta = now.addingTimeInterval(left / (steps[t].kind == "bus" ? 8 : 1.25))
                 default:
-                    eta = now.addingTimeInterval(left / guess.walkSpeed(now))
+                    eta = now.addingTimeInterval(left / (guess.walkSpeed(now) ?? pace))
                 }
             }
         }
+        if let planB { state.next = planB }
         state.eta = eta
         state.end = max(eta, now.addingTimeInterval(30))
         busEnd = kind == "bus" ? dest.map(loc) : nil
         return state
+    }
+
+    /// Passages du bus d'une étape : celui du planning, puis les suivants de la même ligne
+    private func runs(_ s: PlanStep) -> [PlanBus] {
+        [PlanBus(dep: s.start, arr: s.end)] + (s.later ?? []).filter { $0.dep > s.start }.sorted { $0.dep < $1.dep }
     }
 
     /// Destination de l'étape : arrêt, collège ou maison (point et nom)
@@ -390,8 +586,8 @@ final class Routine: NSObject, CLLocationManagerDelegate {
     // MARK: Hors étape
 
     /// Nuit, soirée, temps libre : l'activité reste affichée et annonce la prochaine étape
-    private func idle(_ now: Date, today: String) {
-        guard let plan else { return }
+    private func idle(_ now: Date) -> RoutineAttributes.ContentState? {
+        guard let plan else { return nil }
         if traveling { traveling = false; tune() }
         var prevEnd = Calendar.current.startOfDay(for: now)
         var upcoming: (Date, PlanStep)?
@@ -405,20 +601,19 @@ final class Routine: NSObject, CLLocationManagerDelegate {
                 if s.kind != "sleep", a > now, upcoming == nil || a < upcoming!.0 { upcoming = (a, s) }
             }
         }
-        guard let up = upcoming else { return }  // planning épuisé : on garde l'affichage jusqu'au prochain envoi
+        guard let up = upcoming else { return nil }  // planning épuisé : on garde l'affichage jusqu'au prochain envoi
         let (at, n) = up
         let when = Calendar.current.isDate(at, inSameDayAs: now) ? Routine.clock(n.start) : "demain \(Routine.clock(n.start))"
         let wake = Wake.shared.next(plan).map { d -> String in
             let c = Calendar.current.dateComponents([.hour, .minute], from: d)
             return String(format: "Réveil à %dh%02d", c.hour ?? 0, c.minute ?? 0)
         }
-        let state = RoutineAttributes.ContentState(
+        return RoutineAttributes.ContentState(
             title: sleeping ? "Bonne nuit" : "Temps libre",
             detail: sleeping ? (wake ?? "") : "",
             kind: sleeping ? "sleep" : "free", start: min(prevEnd, now), end: at,
             next: "Ensuite : \(n.kind == "lesson" ? "cours de \(n.label)" : n.label) à \(when)",
             travel: false)
-        show(state, day: today)
     }
 
     /// Déplacement en cours (étapes de trajet qui se suivent) : bornes dans `steps`
@@ -465,6 +660,8 @@ final class Routine: NSObject, CLLocationManagerDelegate {
             // Une seule activité, toujours la même : les doublons éventuels disparaissent
             for extra in all.dropFirst() { Task { await extra.end(nil, dismissalPolicy: .immediate) } }
             guard changed(last, state) else { return }
+            // Nouvelle étape : le bouton « Prochain cours » du Centre de contrôle se met à jour
+            if last?.title != state.title, #available(iOS 18.0, *) { ControlCenter.shared.reloadAllControls() }
             last = state
             Task { await activity.update(content) }
             return

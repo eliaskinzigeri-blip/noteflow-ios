@@ -63,6 +63,11 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
 
     func clearSchool() { keepSchool([]) }
 
+    /// Retire une notification programmée (départ déjà pris, trajet commencé)
+    func cancel(_ id: String) {
+        center.removePendingNotificationRequests(withIdentifiers: [id])
+    }
+
     private static let iso: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

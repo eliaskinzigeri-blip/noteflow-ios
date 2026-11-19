@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage("notifySchool") private var school = true
     @State private var copied = false
     @AppStorage("arrival") private var arrival = true
+    @AppStorage("leaveAlert") private var leaveAlert = true
     @AppStorage("wakeOn") private var wakeOn = false
     @AppStorage("wakeSchoolOnly") private var schoolOnly = true
     @AppStorage("wakeMode") private var wakeMode = "phone"
@@ -65,8 +66,16 @@ struct SettingsView: View {
                 } footer: {
                     Text("En arrivant au collège ou à la maison, l’activité en direct passe toute seule à l’étape suivante. Il faut la position « Toujours » (Réglages › NoteFlow › Position).")
                 }
-                Section("Widget") {
+                Section {
+                    Toggle("Pars maintenant et bus raté", isOn: $leaveAlert)
+                        .onChange(of: leaveAlert) { _, on in if on { Reminders.shared.authorize() } }
+                } footer: {
+                    Text("Une notification au moment exact de partir, calculée avec ta position et ta vitesse de marche. Si tu vas rater le bus ou l’as raté : le bus suivant et l’heure d’arrivée à pied.")
+                }
+                Section("Widget et boutons") {
                     Label("Maintiens ton doigt sur l’écran d’accueil ou l’écran verrouillé, touche Modifier, puis Ajouter un widget et choisis NoteFlow.", systemImage: "square.grid.2x2")
+                        .font(.callout)
+                    Label("Centre de contrôle (ou écran verrouillé › Personnaliser) : + › Ajouter une commande › NoteFlow : prochain cours, notes, devoirs, focus.", systemImage: "switch.2")
                         .font(.callout)
                 }
             }

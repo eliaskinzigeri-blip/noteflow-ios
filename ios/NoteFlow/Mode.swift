@@ -74,10 +74,10 @@ final class ModeGuess {
         if r == .bus { rideStart = now; rideMeters = 0 }
     }
 
-    /// Ta vitesse de marche (moyenne des 90 dernières secondes), 4,5 km/h tant qu'on ne la connaît pas
-    func walkSpeed(_ now: Date) -> Double {
+    /// Ta vitesse de marche du moment (moyenne des 90 dernières secondes), nil tant qu'on ne la connaît pas
+    func walkSpeed(_ now: Date) -> Double? {
         let v = fixes.filter { now.timeIntervalSince($0.timestamp) < 90 && $0.speed >= 0.3 && $0.horizontalAccuracy < 30 }.map(\.speed)
-        guard mode == .walk, v.count >= 5 else { return 1.25 }
+        guard mode == .walk, v.count >= 5 else { return nil }
         return min(max(v.reduce(0, +) / Double(v.count), 0.9), 2.2)
     }
 

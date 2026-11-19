@@ -75,7 +75,7 @@ final class Inbox {
     }
 
     private struct Alert: Decodable { let id: String; let kind: String; let at: Double; let title: String; let body: String; let url: String }
-    private struct Work: Decodable { let id: String; let subject: String; let text: String; let due: String }
+    struct Work: Codable { let id: String; let subject: String; let text: String; let due: String }
     private struct Reply: Decodable {
         let now: Double
         let quiet: Bool
@@ -87,8 +87,18 @@ final class Inbox {
         let evals: [Work]
     }
 
+    /// Devoirs et évaluations à venir (dernier relevé) : le sac du lendemain dans l'activité en direct
+    var work: (homework: [Work], evals: [Work]) {
+        let dec = JSONDecoder()
+        let hw = d.data(forKey: "workHomework").flatMap { try? dec.decode([Work].self, from: $0) } ?? []
+        let ev = d.data(forKey: "workEvals").flatMap { try? dec.decode([Work].self, from: $0) } ?? []
+        return (hw, ev)
+    }
+
     private func handle(_ r: Reply) {
         d.set(Date().timeIntervalSince1970, forKey: "inboxOK")
+        d.set(try? JSONEncoder().encode(r.homework), forKey: "workHomework")
+        d.set(try? JSONEncoder().encode(r.evals), forKey: "workEvals")
         plan(r)
         // Focus « sans notifications » : les alertes attendent la fin du focus (le relevé repart du même point)
         if r.quiet && d.double(forKey: "inboxSince") > 0 { return }

@@ -18,6 +18,13 @@ struct NoteFlowApp: App {
                 .ignoresSafeArea()
                 .background(Color(red: 0.96, green: 0.96, blue: 0.96))
                 .sheet(isPresented: $ui.settings) { SettingsView() }
+                // Boutons du Centre de contrôle : noteflow://open?to=notes ouvre la page #/notes
+                .onOpenURL { url in
+                    guard url.scheme == "noteflow",
+                          let to = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "to" })?.value,
+                          to.allSatisfy({ $0.isLetter || $0 == "/" || $0 == "-" }) else { return }
+                    WebView.open("#/\(to)")
+                }
         }
         .onChange(of: phase) { _, now in
             if now == .active { Routine.shared.refresh(); Inbox.shared.poll(force: true) }

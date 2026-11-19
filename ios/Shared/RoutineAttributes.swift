@@ -18,6 +18,9 @@ struct RoutineAttributes: ActivityAttributes {
         var dest: String? = nil
         var meters: Double? = nil
         var progress: Double? = nil
+        // Lignes en plus sous l'étape (sac du lendemain : cours, devoirs, évaluations) et météo du trajet
+        var lines: [String]? = nil
+        var weather: String? = nil
     }
 
     var day: String

@@ -7,6 +7,12 @@ struct NoteFlowLiveBundle: WidgetBundle {
     var body: some Widget {
         RoutineLive()
         NextWidget()
+        if #available(iOS 18.0, *) {
+            NextLessonControl()
+            NotesControl()
+            TasksControl()
+            FocusControl()
+        }
     }
 }
 
@@ -44,7 +50,8 @@ struct RoutineLive: Widget {
                         }
                     } else {
                         VStack(alignment: .leading, spacing: 3) {
-                            if !s.detail.isEmpty { Text(s.detail).font(.caption).foregroundStyle(NF.soft).lineLimit(1) }
+                            if let line = s.lines?.first { Text(line).font(.caption).lineLimit(1) }
+                            else if !s.detail.isEmpty { Text(s.detail).font(.caption).foregroundStyle(NF.soft).lineLimit(1) }
                             if !s.next.isEmpty { Text(s.next).font(.caption2).foregroundStyle(NF.soft).lineLimit(1) }
                         }
                     }
@@ -190,7 +197,7 @@ struct LockScreenView: View {
                 }
                 Track(progress: state.progress ?? 0, kind: state.kind)
                 if !state.next.isEmpty {
-                    Text(state.next).font(.caption2).foregroundStyle(NF.soft).lineLimit(1)
+                    Text(state.next).font(.caption2).foregroundStyle(NF.soft).lineLimit(2)
                 }
             }
             ModeBadge(kind: state.kind).frame(width: 74)
@@ -198,27 +205,48 @@ struct LockScreenView: View {
         .foregroundStyle(.white)
     }
 
-    /// Étape, séance, temps libre ou nuit
+    /// Étape, séance, temps libre ou nuit (avec le sac du lendemain et la météo du trajet quand il y en a)
     private var step: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let lines = Array((state.lines ?? []).prefix(3))
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center, spacing: 6) {
                 Image(systemName: icon(state.kind)).foregroundStyle(state.kind == "session" ? NF.accent : .white)
                 Text(state.title).font(.headline).lineLimit(1)
                 Spacer(minLength: 4)
                 Countdown(state: state, font: .subheadline.weight(.semibold))
             }
-            if !state.detail.isEmpty {
-                Text(state.detail).font(.caption).foregroundStyle(NF.soft).lineLimit(2)
+            if !lines.isEmpty {
+                // Sac : cours, devoirs, évaluations (à la place du détail et de la barre)
+                ForEach(lines, id: \.self) { line in
+                    Text(line).font(.caption).lineLimit(1)
+                }
+            } else {
+                if !state.detail.isEmpty {
+                    Text(state.detail).font(.caption).foregroundStyle(NF.soft).lineLimit(2)
+                }
+                ProgressView(timerInterval: min(state.start, Date())...state.end, countsDown: false,
+                             label: { EmptyView() }, currentValueLabel: { EmptyView() })
+                    .tint(NF.accent)
             }
-            ProgressView(timerInterval: min(state.start, Date())...state.end, countsDown: false,
-                         label: { EmptyView() }, currentValueLabel: { EmptyView() })
-                .tint(NF.accent)
+            if let weather = state.weather, !weather.isEmpty {
+                Label(weather, systemImage: weatherIcon(weather))
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+            }
             if !state.next.isEmpty {
                 Text(state.next).font(.caption2).foregroundStyle(NF.soft).lineLimit(1)
             }
         }
         .foregroundStyle(.white)
     }
+}
+
+/// Icône de la météo d'après son résumé
+func weatherIcon(_ text: String) -> String {
+    if text.contains("Neige") { return "cloud.snow.fill" }
+    if text.contains("Pluie") { return "cloud.rain.fill" }
+    if text.contains("Froid") { return "thermometer.snowflake" }
+    return "sun.max.fill"
 }
 
 /// Indicateur du trajet, deviné avec ta vitesse : un marcheur à pied, un bus en bus, une horloge en attente.

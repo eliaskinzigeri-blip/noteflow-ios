@@ -14,6 +14,8 @@ enum Prefs {
     static var school: Bool { flag("notifySchool", true) }
     /// Arrivée au collège et à la maison détectée par la position
     static var arrival: Bool { flag("arrival", true) }
+    /// « Pars maintenant » (heure de départ calculée avec ta position) et bus raté (plan B)
+    static var leave: Bool { flag("leaveAlert", true) }
 
     /// Réveil intelligent : désactivé tant que l'élève ne l'a pas allumé
     static var wakeOn: Bool { flag("wakeOn", false) }

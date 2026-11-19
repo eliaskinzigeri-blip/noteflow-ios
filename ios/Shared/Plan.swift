@@ -3,6 +3,8 @@ import Foundation
 /// Planning envoyé par le site (frontend/routine.js, pushNative) : les étapes du jour et du lendemain,
 /// l'heure de réveil de chaque jour et les rappels à programmer.
 struct PlanPoint: Codable { let lat: Double; let lon: Double }
+/// Passage d'un bus (minutes depuis minuit) : départ de l'arrêt, arrivée à l'arrêt de descente
+struct PlanBus: Codable, Equatable { let dep: Double; let arr: Double }
 struct PlanStep: Codable {
     let label: String
     let detail: String
@@ -11,6 +13,7 @@ struct PlanStep: Codable {
     let kind: String
     let travel: Bool
     let pts: [PlanPoint]
+    var later: [PlanBus]? = nil  // bus : passages suivants de la même ligne (plan B si celui-ci est raté)
 }
 struct PlanDay: Codable {
     let day: String
