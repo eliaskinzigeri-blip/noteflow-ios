@@ -17,12 +17,12 @@
       "category": "education",
       "versions": [
         {
-          "version": "1.0.23",
-          "buildVersion": "23",
-          "date": "2026-11-20T17:46:07Z",
-          "localizedDescription": "App iPhone : Siri « on mange quoi à la cantine »",
-          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.23/NoteFlow.ipa",
-          "size": 634140,
+          "version": "1.0.24",
+          "buildVersion": "24",
+          "date": "2026-11-20T22:12:12Z",
+          "localizedDescription": "Nouvelle version",
+          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.24/NoteFlow.ipa",
+          "size": 668997,
           "minOSVersion": "17.0"
         }
       ],
