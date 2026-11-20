@@ -54,6 +54,7 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: "Avec « Toujours », l’activité en direct de ton écran verrouillé suit ton trajet même quand NoteFlow est fermé."
         NSCameraUsageDescription: "Pour photographier tes cours, tes feuilles et tes sujets."
         NSPhotoLibraryUsageDescription: "Pour choisir les photos de tes cours."
+        NSPhotoLibraryAddUsageDescription: "Pour enregistrer tes leçons reconstituées dans Photos."
         NSMicrophoneUsageDescription: "Pour la dictée à voix haute."
         NSAlarmKitUsageDescription: "NoteFlow règle ton réveil sur ton premier cours et ton temps de préparation."
         NSLocalNetworkUsageDescription: "Pour programmer le lever de soleil de tes lumières Philips Hue."

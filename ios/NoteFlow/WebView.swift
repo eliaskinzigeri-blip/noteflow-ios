@@ -1,3 +1,4 @@
+import Photos
 import SwiftUI
 import UIKit
 import WebKit
@@ -159,6 +160,14 @@ struct WebView: UIViewRepresentable {
                 NativeUI.shared.settings = true
                 return
             }
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "lessonImage" {
+                // Leçon reconstituée (morceaux collés) : enregistrée dans Photos ou imprimée
+                guard let uri = obj["data"] as? String, let comma = uri.firstIndex(of: ","),
+                      let bytes = Data(base64Encoded: String(uri[uri.index(after: comma)...])), let image = UIImage(data: bytes) else { return }
+                let name = (obj["name"] as? String) ?? "Leçon"
+                if obj["action"] as? String == "print" { printLesson(image, name: name) } else { saveLesson(image) }
+                return
+            }
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "menu" {
                 // Menus de la cantine lus sur Pronote : pour Siri (« on mange quoi à la cantine »)
                 if (try? JSONDecoder().decode(Menu.self, from: data)) != nil { UserDefaults.standard.set(data, forKey: "menu") }
@@ -182,6 +191,54 @@ struct WebView: UIViewRepresentable {
                 return
             }
             Routine.shared.receive(data)
+        }
+
+        /// Leçon dans Photos (iOS demande l'accord la première fois)
+        private func saveLesson(_ image: UIImage) {
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                guard status == .authorized || status == .limited else {
+                    DispatchQueue.main.async { self.notice("NoteFlow n’a pas accès à Photos : Réglages › NoteFlow › Photos.") }
+                    return
+                }
+                PHPhotoLibrary.shared().performChanges({
+                    PHAssetChangeRequest.creationRequestForAsset(from: image)
+                }) { ok, _ in
+                    DispatchQueue.main.async { self.notice(ok ? "Leçon enregistrée dans Photos." : "La leçon n’a pas pu être enregistrée.") }
+                }
+            }
+        }
+
+        /// Leçon imprimée : une longue image coupée en pages A4, à la largeur de la page
+        private func printLesson(_ image: UIImage, name: String) {
+            let page = CGRect(x: 0, y: 0, width: 595, height: 842), margin: CGFloat = 24
+            let width = page.width - 2 * margin, room = page.height - 2 * margin
+            let scale = width / image.size.width
+            let total = image.size.height * scale
+            let pdf = UIGraphicsPDFRenderer(bounds: page).pdfData { ctx in
+                var y: CGFloat = 0
+                repeat {
+                    ctx.beginPage()
+                    let clip = CGRect(x: margin, y: margin, width: width, height: room)
+                    ctx.cgContext.saveGState()
+                    ctx.cgContext.clip(to: clip)
+                    image.draw(in: CGRect(x: margin, y: margin - y, width: width, height: total))
+                    ctx.cgContext.restoreGState()
+                    y += room
+                } while y < total - 1
+            }
+            let info = UIPrintInfo(dictionary: nil)
+            info.outputType = .general
+            info.jobName = name
+            let printer = UIPrintInteractionController.shared
+            printer.printInfo = info
+            printer.printingItem = pdf
+            printer.present(animated: true)
+        }
+
+        private func notice(_ text: String) {
+            let alert = UIAlertController(title: nil, message: text, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert) {}
         }
 
         /// Autres sites (Prépa Basket, Pronote, cartes) : dans Safari.
