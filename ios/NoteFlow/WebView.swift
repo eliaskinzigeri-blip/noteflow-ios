@@ -154,6 +154,11 @@ struct WebView: UIViewRepresentable {
                 NativeUI.shared.settings = true
                 return
             }
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "menu" {
+                // Menus de la cantine lus sur Pronote : pour Siri (« on mange quoi à la cantine »)
+                if (try? JSONDecoder().decode(Menu.self, from: data)) != nil { UserDefaults.standard.set(data, forKey: "menu") }
+                return
+            }
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "grades" {
                 // Moyennes et dernières notes : pour Siri (« c'est quoi ma moyenne »)
                 Grades.save(data)

@@ -226,6 +226,41 @@ extension Answers {
     }
 }
 
+/// Menus de la cantine, envoyés par le site (lus par l'IA dans les informations Pronote)
+struct Menu: Codable {
+    struct Day: Codable { let date: String; let meals: [String] }
+    let days: [Day]
+
+    static var saved: Menu? {
+        UserDefaults.standard.data(forKey: "menu").flatMap { try? JSONDecoder().decode(Menu.self, from: $0) }
+    }
+}
+
+extension Answers {
+    static func menu(_ choice: DayChoice) -> String {
+        let (_, name, date) = findDay(choice)
+        let key = PlanClock.dayFormat.string(from: date)
+        let when = name == "Aujourd’hui" ? "Aujourd’hui" : name
+        if let day = Menu.saved?.days.first(where: { $0.date == key }) {
+            return "\(when) à la cantine : \(day.meals.joined(separator: ", "))."
+        }
+        let weekday = Calendar.current.component(.weekday, from: date)
+        if weekday == 1 || weekday == 7 { return "\(when), pas de cantine." }
+        if Menu.saved == nil { return "Je n’ai pas encore les menus de la cantine : ouvre NoteFlow connecté, je les cherche sur Pronote." }
+        return "Je n’ai pas trouvé le menu de \(when.lowercased()) : il n’est peut-être pas encore publié sur Pronote."
+    }
+}
+
+struct MenuIntent: AppIntent {
+    static let title: LocalizedStringResource = "Menu de la cantine"
+    static let description = IntentDescription("Ce qu’on mange à la cantine, d’après les menus publiés sur Pronote.")
+    @Parameter(title: "Jour", default: .today) var day: DayChoice
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: "\(Answers.menu(day))")
+    }
+}
+
 struct BedtimeIntent: AppIntent {
     static let title: LocalizedStringResource = "Heure du coucher"
     static let description = IntentDescription("À quelle heure te coucher, d’après ta routine NoteFlow.")
@@ -268,10 +303,13 @@ struct BagIntent: AppIntent {
 
 struct HomeworkIntent: AppIntent {
     static let title: LocalizedStringResource = "Mes devoirs"
-    static let description = IntentDescription("Les devoirs à rendre ces prochains jours.")
+    static let description = IntentDescription("Les devoirs à rendre ces prochains jours et les évaluations à venir.")
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        .result(dialog: "\(Answers.homework())")
+        // Devoirs puis évaluations (les deux dans une seule question : Apple limite à 10 questions par app)
+        let evals = Answers.evals()
+        let text = Inbox.shared.linked && !evals.hasPrefix("Aucune") ? "\(Answers.homework()) \(evals)" : Answers.homework()
+        return .result(dialog: "\(text)")
     }
 }
 
@@ -359,7 +397,11 @@ struct NoteFlowShortcuts: AppShortcutsProvider {
             "\(.applicationName) mes devoirs",
             "Qu'est-ce que j'ai comme devoirs avec \(.applicationName)",
             "J'ai quoi comme devoirs \(.applicationName)",
-        ], shortTitle: "Mes devoirs", systemImageName: "checklist")
+            "\(.applicationName) j'ai des contrôles",
+            "\(.applicationName) mes évaluations",
+            "\(.applicationName) mes prochains contrôles",
+            "\(.applicationName) c'est quand mon prochain contrôle",
+        ], shortTitle: "Devoirs et contrôles", systemImageName: "checklist")
         AppShortcut(intent: NextLessonIntent(), phrases: [
             "\(.applicationName) c'est quoi mon prochain cours",
             "\(.applicationName) mon prochain cours",
@@ -373,12 +415,15 @@ struct NoteFlowShortcuts: AppShortcutsProvider {
             "\(.applicationName) je finis à quelle heure \(\.$day)",
             "\(.applicationName) emploi du temps",
         ], shortTitle: "Emploi du temps", systemImageName: "calendar")
-        AppShortcut(intent: EvalsIntent(), phrases: [
-            "\(.applicationName) j'ai des contrôles",
-            "\(.applicationName) mes évaluations",
-            "\(.applicationName) mes prochains contrôles",
-            "\(.applicationName) c'est quand mon prochain contrôle",
-        ], shortTitle: "Évaluations", systemImageName: "pencil.and.list.clipboard")
+        AppShortcut(intent: MenuIntent(), phrases: [
+            "\(.applicationName) on mange quoi à la cantine",
+            "\(.applicationName) on mange quoi à la cantine \(\.$day)",
+            "\(.applicationName) on mange quoi \(\.$day)",
+            "\(.applicationName) le menu de la cantine",
+            "\(.applicationName) menu de la cantine \(\.$day)",
+            "\(.applicationName) c'est quoi le menu",
+            "On mange quoi à la cantine \(.applicationName)",
+        ], shortTitle: "Menu de la cantine", systemImageName: "fork.knife")
         AppShortcut(intent: GradesIntent(), phrases: [
             "\(.applicationName) c'est quoi ma moyenne",
             "\(.applicationName) ma moyenne",
