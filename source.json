@@ -17,12 +17,12 @@
       "category": "education",
       "versions": [
         {
-          "version": "1.0.19",
-          "buildVersion": "19",
-          "date": "2026-11-19T15:13:55Z",
-          "localizedDescription": "App iPhone : questions à Siri (coucher, réveil, départ, sac, devoirs)",
-          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.19/NoteFlow.ipa",
-          "size": 536774,
+          "version": "1.0.20",
+          "buildVersion": "20",
+          "date": "2026-11-20T17:26:08Z",
+          "localizedDescription": "Nouvelle version",
+          "downloadURL": "https://github.com/eliaskinzigeri-blip/noteflow-ios/releases/download/v1.0.20/NoteFlow.ipa",
+          "size": 621093,
           "minOSVersion": "17.0"
         }
       ],
