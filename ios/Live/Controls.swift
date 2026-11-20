@@ -3,12 +3,12 @@ import SwiftUI
 import WidgetKit
 
 // Boutons de NoteFlow pour le Centre de contrôle et l'écran verrouillé (iOS 18) : ils vivent dans l'extension
-// existante (aucun identifiant d'app en plus) et ouvrent l'app à la bonne page avec un lien noteflow://.
+// existante (aucun identifiant d'app en plus) et ouvrent l'app à la bonne page (OpenPageIntent).
 // À ajouter : Centre de contrôle › + › Ajouter une commande › NoteFlow (ou écran verrouillé › Personnaliser).
 
 @available(iOS 18.0, *)
-private func open(_ page: String) -> OpenURLIntent {
-    OpenURLIntent(URL(string: "noteflow://open?to=\(page)")!)
+private func open(_ page: String) -> OpenPageIntent {
+    OpenPageIntent(page: page)
 }
 
 /// Prochain cours (matière, heure, salle) : touche pour ouvrir l'emploi du temps

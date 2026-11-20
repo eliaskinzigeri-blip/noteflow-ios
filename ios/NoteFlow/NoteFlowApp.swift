@@ -26,9 +26,17 @@ struct NoteFlowApp: App {
                           to.allSatisfy({ $0.isLetter || $0 == "/" || $0 == "-" }) else { return }
                     WebView.open("#/\(to)")
                 }
+                // Boutons du Centre de contrôle (OpenPageIntent) : la page demandée s'ouvre
+                .onReceive(NotificationCenter.default.publisher(for: OpenPageIntent.notice)) { _ in
+                    if let page = OpenPageIntent.take() { WebView.open("#/\(page)") }
+                }
         }
         .onChange(of: phase) { _, now in
-            if now == .active { Routine.shared.refresh(); Inbox.shared.poll(force: true) }
+            if now == .active {
+                if let page = OpenPageIntent.take() { WebView.open("#/\(page)") }
+                Routine.shared.refresh()
+                Inbox.shared.poll(force: true)
+            }
             if now == .background { NoteFlowApp.scheduleRefresh() }
         }
         // Réveil d'iOS en arrière-plan (app suspendue, sans localisation « Toujours ») : relevé des notifications de l'école

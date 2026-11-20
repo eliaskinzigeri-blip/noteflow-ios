@@ -35,6 +35,12 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDevelopmentRegion: fr
+        # Autres noms pour Siri (« Dis Siri, ma routine, je me couche à quelle heure ») : NoteFlow est mal reconnu
+        INAlternativeAppNames:
+          - INAlternativeAppName: Ma routine
+          - INAlternativeAppName: Mon planning
+          - INAlternativeAppName: Note flow
+            INAlternativeAppNamePronunciationHint: note flo
         CFBundleLocalizations: [fr]
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]

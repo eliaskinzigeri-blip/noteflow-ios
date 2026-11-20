@@ -154,6 +154,11 @@ struct WebView: UIViewRepresentable {
                 NativeUI.shared.settings = true
                 return
             }
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "grades" {
+                // Moyennes et dernières notes : pour Siri (« c'est quoi ma moyenne »)
+                Grades.save(data)
+                return
+            }
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["type"] as? String == "auth" {
                 // Session du site : copie de secours dans le trousseau
                 if let items = obj["items"] as? [String: String] {
