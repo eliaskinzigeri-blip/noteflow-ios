@@ -35,4 +35,5 @@ enum Prefs {
 final class NativeUI: ObservableObject {
     static let shared = NativeUI()
     @Published var settings = false
+    @Published var focusAdd = false  // panneau « Focus » du bouton du Centre de contrôle
 }

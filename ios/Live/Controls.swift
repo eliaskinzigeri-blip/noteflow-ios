@@ -81,9 +81,9 @@ struct TasksControl: ControlWidget {
 struct FocusControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: "com.noteflow.app.control.focus") {
-            ControlWidgetButton(action: open("focus")) { Label("Focus", systemImage: "scope") }
+            ControlWidgetButton(action: open("focus-add")) { Label("Focus", systemImage: "timer") }
         }
         .displayName("Focus")
-        .description("Lance un focus dans NoteFlow.")
+        .description("Ajoute des minutes au focus, ou en lance un.")
     }
 }

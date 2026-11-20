@@ -69,6 +69,11 @@ struct WebView: UIViewRepresentable {
     private static var pending: String?
 
     /// Ouvre une page de NoteFlow (« #/notes ») depuis une notification ; un lien complet part dans Safari.
+    /// Focus changé depuis l'app (panneau du Centre de contrôle) : le site relit son focus (bandeau et minuteur)
+    static func focusChanged() {
+        current?.evaluateJavaScript("window.dispatchEvent(new Event('nf-focus-changed'))")
+    }
+
     static func open(_ target: String) {
         if target.hasPrefix("https://") {
             if let link = URL(string: target) { UIApplication.shared.open(link) }
