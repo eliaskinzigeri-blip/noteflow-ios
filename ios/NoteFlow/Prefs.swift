@@ -36,4 +36,5 @@ final class NativeUI: ObservableObject {
     static let shared = NativeUI()
     @Published var settings = false
     @Published var focusAdd = false  // panneau « Focus » du bouton du Centre de contrôle
+    @Published var setup = false     // « Activer les extensions » (à l'entrée dans l'app, s'il en manque)
 }

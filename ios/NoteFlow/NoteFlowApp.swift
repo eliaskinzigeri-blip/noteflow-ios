@@ -21,6 +21,7 @@ struct NoteFlowApp: App {
                 .sheet(isPresented: $ui.settings) { SettingsView() }
                 // Panneau « Focus » (bouton du Centre de contrôle) : sur une vue à part, une seule feuille par vue
                 .background(Color.clear.sheet(isPresented: $ui.focusAdd) { FocusAddView() })
+                .background(Color.clear.sheet(isPresented: $ui.setup) { SetupView() })
                 // Boutons du Centre de contrôle : noteflow://open?to=notes ouvre la page #/notes
                 .onOpenURL { url in
                     guard url.scheme == "noteflow",
@@ -36,6 +37,12 @@ struct NoteFlowApp: App {
         .onChange(of: phase) { _, now in
             if now == .active {
                 if let page = OpenPageIntent.take() { NoteFlowApp.show(page) }
+                // Une extension manque (position, notifications, Siri…) : on le propose à chaque entrée dans l'app
+                Task { @MainActor in
+                    await Setup.shared.refresh()
+                    let ui = NativeUI.shared
+                    if !Setup.shared.missing.isEmpty, !ui.settings, !ui.focusAdd { ui.setup = true }
+                }
                 Routine.shared.refresh()
                 Inbox.shared.poll(force: true)
             }

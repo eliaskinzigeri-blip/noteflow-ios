@@ -401,6 +401,12 @@ struct NoteFlowShortcuts: AppShortcutsProvider {
             "\(.applicationName) mes évaluations",
             "\(.applicationName) mes prochains contrôles",
             "\(.applicationName) c'est quand mon prochain contrôle",
+            "\(.applicationName) j'ai une évaluation",
+            "\(.applicationName) j'ai un contrôle",
+            "\(.applicationName) évaluations",
+            "\(.applicationName) mes contrôles",
+            "\(.applicationName) j'ai des évaluations",
+            "Mes évaluations \(.applicationName)",
         ], shortTitle: "Devoirs et contrôles", systemImageName: "checklist")
         AppShortcut(intent: NextLessonIntent(), phrases: [
             "\(.applicationName) c'est quoi mon prochain cours",

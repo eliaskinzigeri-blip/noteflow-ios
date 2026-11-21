@@ -31,6 +31,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Extensions à activer : en tête, chaque fois qu'on ouvre les réglages
+                SetupList()
                 wakeSection
                 if wakeOn && wakeMode != "phone" { hueSection }
                 Section {
@@ -85,6 +87,7 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } }
             }
             .onDisappear { Routine.shared.settingsChanged(); Inbox.shared.poll(force: true) }
+            .task { await Setup.shared.refresh() }
         }
     }
 

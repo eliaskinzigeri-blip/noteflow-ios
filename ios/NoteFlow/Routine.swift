@@ -118,6 +118,12 @@ final class Routine: NSObject, CLLocationManagerDelegate {
         refresh()
     }
 
+    /// « Activer les extensions » : la position, puis « Toujours »
+    func askAlways() {
+        if location.authorizationStatus == .notDetermined { location.requestWhenInUseAuthorization() }
+        else { location.requestAlwaysAuthorization() }
+    }
+
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         startLocation()
     }
