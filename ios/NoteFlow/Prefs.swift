@@ -9,7 +9,7 @@ enum Prefs {
     static func flag(_ key: String, _ fallback: Bool) -> Bool { d.object(forKey: key) == nil ? fallback : d.bool(forKey: key) }
 
     /// Rappels personnels en notifications de l'iPhone (jamais les étapes de la routine : l'activité en direct les montre)
-    static var notify: Bool { flag("notify", false) }
+    static var notify: Bool { flag("notify", true) }
     /// Notifications de l'école (nouvelle note, information, devoirs pour demain, évaluation) : voir Inbox.swift
     static var school: Bool { flag("notifySchool", true) }
     /// Arrivée au collège et à la maison détectée par la position

@@ -5,7 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage("notify") private var notify = false
+    @AppStorage("notify") private var notify = true
     @AppStorage("notifySchool") private var school = true
     @State private var copied = false
     @AppStorage("arrival") private var arrival = true
@@ -61,7 +61,7 @@ struct SettingsView: View {
                 Section {
                     Toggle("Tes rappels en notification", isOn: $notify)
                 } footer: {
-                    Text("Seulement les rappels que tu crées, jamais les étapes de la routine : elles restent affichées dans l’activité en direct. Laisse coupé si le raccourci NoteFlow te les envoie déjà.")
+                    Text("Seulement les rappels que tu crées, jamais les étapes de la routine : elles restent affichées dans l’activité en direct. Coupe-le seulement si le raccourci NoteFlow te les envoie déjà.")
                 }
                 Section {
                     Toggle("Arrivée détectée", isOn: $arrival)
